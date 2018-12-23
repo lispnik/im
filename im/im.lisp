@@ -6,7 +6,9 @@
 	  file-close
 	  call-with-open-file
 	  with-open-file
-	  file-handle))
+	  file-handle
+          file-info
+          file-read-image-info))
 
 (defun file-open (pathname)
   ;; TODO pathname designator (see docs for cl:open)
@@ -53,8 +55,16 @@
 (defun file-handle (im-file index)
   (im-cffi::%im-file-handle im-file index))
 
-;;; TODO
-;; (defun file-info (im-file))
+(defun file-info (im-file)
+  (cffi:with-foreign-objects
+      ((format-ptr :char 10)            ;FIXME magic numbers here
+       (compression-ptr :char 20)
+       (image-count-ptr :int))
+    (im-cffi::%im-file-get-info im-file format-ptr compression-ptr image-count-ptr)
+    (values (cffi:foreign-string-to-lisp format-ptr)
+            (cffi:foreign-string-to-lisp compression-ptr)
+            (cffi:mem-ref image-count-ptr :int))))
+
 ;;; TODO aka setinfo 
 ;; (defun (setf file-compression) (compression im-file))
 ;;; TODO
@@ -121,8 +131,18 @@
       palette)))
 
 
+;; int imFileReadImageInfo(imFile* ifile, int index, int *width, int *height, int *file_color_mode, int *file_data_type);
 
-
+(defun file-read-image-info (im-file index)
+  (cffi:with-foreign-objects
+      ((width-ptr :int)
+       (height-ptr :int)
+       (color-mode-ptr :int)
+       (file-data-type-ptr :int))
+    (im-cffi::%im-file-read-image-info im-file index width-ptr height-ptr color-mode-ptr file-data-type-ptr)
+    (values (cffi:mem-ref width-ptr :int)
+            (cffi:mem-ref height-ptr :int)
+            (cffi:mem-ref file-data-type-ptr :int))))
 
 ;;; image
 

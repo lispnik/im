@@ -5,7 +5,7 @@
 
 (cffi:define-foreign-library lib-im-avi
   (:windows "im_avi.dll")
-  (t (:default "im_jp")))
+  (t (:default "im_avi")))
 
 (cffi:use-foreign-library lib-im-avi)
 
