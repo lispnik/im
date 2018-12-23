@@ -78,7 +78,7 @@
   (im-file im-file)
   (index :int))
 
-;;; NOTE this is a rather dangerous function to call. Instead of
+;;; FIXME NOTE this is a rather dangerous function to call. Instead of
 ;;; exposing this, expose the FileFormat, FileCompression and
 ;;; FileImageCount attributes of imFile instead.
 (cffi:defcfun (%im-file-get-info "imFileGetInfo") :void
@@ -219,7 +219,8 @@
 
 ;;; im_format_all.h
 
-#+windows (cffi:defcfun (%im-format-register-avi "imFormatRegisterAVI") :void)
+#+windows
+(cffi:defcfun (%im-format-register-avi "imFormatRegisterAVI") :void)
 
 ;;; im_format_ecw.h
 
@@ -231,13 +232,292 @@
 
 ;;; im_format_wmv.h
 
-#+windows (cffi:defcfun (%im-format-register-wmv "imFormatRegisterWMV") :void)
+#+windows
+(cffi:defcfun (%im-format-register-wmv "imFormatRegisterWMV") :void)
 
 ;;; im_image.h
 
 (cffi:defctype im-image :pointer)
 
+(cffi:defcfun (%im-image-create "imImageCreate") im-image
+  (width :int)
+  (height :int)
+  (color-space color-space)
+  (data-type data-type))
+
+(cffi:defcfun (%im-image-init "imImageInit") im-image
+  (width :int)
+  (height :int)
+  (color-space color-space)
+  (data-type data-type)
+  (data-buffer :pointer)
+  (palette (:pointer :long))
+  (palette-count :int))
+
+(cffi:defcfun (%im-image-create-based "imImageCreateBased") im-image
+  (im-image im-image)
+  (width :int)
+  (height :int)
+  (color-space color-space)
+  (data-type data-type))
+
+(cffi:defcfun (%im-image-destroy "imImageDestroy") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-add-alpha "imImageAddAlpha") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-set-alpha "imImageSetAlpha") :void
+  (im-image im-image)
+  (alpha :float))
+
+(cffi:defcfun (%im-image-remove-alpha "imImageRemoveAlpha") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-reshape "imImageReshape") :void
+  (im-image im-image)
+  (width :int)
+  (height :int))
+
+(cffi:defcfun (%im-image-copy "imImageCopy") :void
+  (im-image-src im-image)
+  (im-image-dst im-image))
+
+(cffi:defcfun (%im-image-copy-data "imImageCopyData") :void
+  (im-image-src im-image)
+  (im-image-dst im-image))
+
+(cffi:defcfun (%im-image-copy-attributes "imImageCopyAttributes") :void
+  (im-image-src im-image)
+  (im-image-dst im-image))
+
+(cffi:defcfun (%im-image-merge-attributes "imImageMergeAttributes") :void
+  (im-image-src im-image)
+  (im-image-dst im-image))
+
+(cffi:defcfun (%im-image-copy-plane "imImageCopyPlane") :void
+  (im-image-src im-image)
+  (src-plane :int)
+  (im-image-dst im-image)
+  (dst-plane :int))
+
+(cffi:defcfun (%im-image-duplicate "imImageDuplicate") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-clone "imImageClone") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-set-attribute "imImageSetAttribute") :void
+  (im-image im-image)
+  (attribute :string)
+  (data-type data-type)
+  (count :int)
+  (data :pointer))
+
+(cffi:defcfun (%im-image-set-attrib-integer "imImageSetAttribInteger") :void
+  (im-image im-image)
+  (attribute :string)
+  (data-type data-type)
+  (value :int))
+
+(cffi:defcfun (%im-image-set-attrib-real "imImageSetAttribReal") :void
+  (im-image im-image)
+  (attribute :string)
+  (data-type data-type)
+  (value :double))
+
+(cffi:defcfun (%im-image-set-attrib-string "imImageSetAttribString") :void
+  (im-image im-image)
+  (attribute :string)
+  (value :string))
+
+(cffi:defcfun (%im-image-get-attribute "imImageGetAttribute") :pointer
+  (im-image im-image)
+  (attribute :string)
+  (data-type data-type)
+  (count (:pointer :int)))
+
+(cffi:defcfun (%im-image-get-attrib-integer "imImageGetAttribInteger") :pointer
+  (im-image im-image)
+  (attribute :string)
+  (index :int))
+
+(cffi:defcfun (%im-image-get-attrib-real "imImageGetAttribReal") :double
+  (im-image im-image)
+  (attribute :string)
+  (index :int))
+
+(cffi:defcfun (%im-image-get-attrib-string "imImageGetAttribString") :string
+  (im-image im-image)
+  (attribute :string))
+
+(cffi:defcfun (%im-image-get-attribute-list "imImageGetAttributeList") :void
+  (im-image im-image)
+  (attrib (:pointer :string))
+  (count (:pointer :int)))
+
+(cffi:defcfun (%im-image-clear "imImageClear") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-is-bitmap "imImageIsBitmap") :boolean
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-set-palette "imImageSetPalette") :void
+  (im-image im-image)
+  (palette (:pointer :long))
+  (palette-count :int))
+
+(cffi:defcfun (%im-image-match-size "imImageMatchSize") :boolean
+  (im-image1 im-image)
+  (im-image2 im-image))
+
+(cffi:defcfun (%im-image-match-color "imImageMatchColor") :boolean
+  (im-image1 im-image)
+  (im-image2 im-image))
+
+(cffi:defcfun (%im-image-match-data-type "imImageMatchDataType") :boolean
+  (im-image1 im-image)
+  (im-image2 im-image))
+
+(cffi:defcfun (%im-image-match-color-space "imImageMatchColorSpace") :boolean
+  (im-image1 im-image)
+  (im-image2 im-image))
+
+(cffi:defcfun (%im-image-match "imImageMatch") :boolean
+  (im-image1 im-image)
+  (im-image2 im-image))
+
+(cffi:defcfun (%im-image-set-map "imImageSetMap") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-set-binary "imImageSetBinary") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-set-gray "imImageSetGray") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-make-binary "imImageMakeBinary") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-image-make-gray "imImageMakeGray") :void
+  (im-image im-image))
+
+(cffi:defcfun (%im-file-load-image "imFileLoadImage") im-image
+  (im-file im-file)
+  (index :int)
+  (error (:pointer :int)))
+
+(cffi:defcfun (%im-file-load-image-frane "imFileLoadImageFrame") :void
+  (im-file im-file)
+  (index :int)
+  (im-image im-image)
+  (error (:pointer :int)))
+
+(cffi:defcfun (%im-file-load-bitmap "imFileLoadBitmap") im-image
+  (im-file im-file)
+  (index :int)
+  (error (:pointer :int)))
+
+(cffi:defcfun (%im-file-load-image-region "imFileLoadImageRegion") im-image
+  (im-file im-file)
+  (index :int)
+  (bitmap :boolean)                     ;FIXME check
+  (error (:pointer :int))
+  (xmin :int)
+  (xmax :int)
+  (ymin :int)
+  (ymax :int)
+  (width :int)
+  (height :int))
+
+(cffi:defcfun (%im-file-load-bitmap-frame "imFileLoadBitmapFrame") :void
+  (im-file im-file)
+  (index :int)
+  (im-image im-image)
+  (error (:pointer :int)))
+
+(cffi:defcfun (%im-file-save-image "imFileSaveImage") :int
+  (im-file im-file)
+  (im-image im-image))
+
+(cffi:defcfun (%im-file-image-load "imFileImageLoad") im-image
+  (filename :string)
+  (index :int)
+  (error (:pointer :int)))
+
+(cffi:defcfun (%im-file-image-load-bitmap "imFileImageLoadBitmap") im-image
+  (filename :string)
+  (index :int)
+  (error (:pointer :int)))
+
+(cffi:defcfun (%im-file-image-load-region "imFileImageLoadRegion") im-image
+  (filename :string)
+  (index :int)
+  (bitmap :boolean)                     ;FIXME check
+  (error (:pointer :int))
+  (xmin :int)
+  (xmax :int)
+  (ymin :int)
+  (ymax :int)
+  (width :int)
+  (height :int))
+
 (cffi:defcfun (%im-file-image-save "imFileImageSave") :int
   (filename :string)
   (format :string)
   (im-image im-image))
+
+;;; TODO
+;; /** Utility macro to draw the image in a CD library canvas.
+;;  * Works only for data_type IM_BYTE, and color spaces: IM_RGB, IM_MAP, IMGRAY and IM_BINARY.
+;;  * \ingroup imgclass */
+;; #define imcdCanvasPutImage(_canvas, _image, _x, _y, _w, _h, _xmin, _xmax, _ymin, _ymax)     \
+;;   {                                                                         \
+;;     if (_image->color_space == IM_RGB)                                      \
+;;     {                                                                       \
+;;       if (_image->has_alpha)                                                \
+;;         cdCanvasPutImageRectRGBA(_canvas, _image->width, _image->height,    \
+;;                           (unsigned char*)_image->data[0],                  \
+;;                           (unsigned char*)_image->data[1],                  \
+;;                           (unsigned char*)_image->data[2],                  \
+;;                           (unsigned char*)_image->data[3],                  \
+;;                           _x, _y, _w, _h, _xmin, _xmax, _ymin, _ymax);      \
+;;       else                                                                  \
+;;         cdCanvasPutImageRectRGB(_canvas, _image->width, _image->height,     \
+;;                           (unsigned char*)_image->data[0],                  \
+;;                           (unsigned char*)_image->data[1],                  \
+;;                           (unsigned char*)_image->data[2],                  \
+;;                           _x, _y, _w, _h, _xmin, _xmax, _ymin, _ymax);      \
+;;     }                                                                       \
+;;     else                                                                    \
+;;       cdCanvasPutImageRectMap(_canvas, _image->width, _image->height,       \
+;;                         (unsigned char*)_image->data[0], _image->palette,   \
+;;                         _x, _y, _w, _h, _xmin, _xmax, _ymin, _ymax);        \
+;;   }                                                                               
+
+;;; im_util.h
+
+(cffi:defcfun (%im-color-mode-space-name "imColorModeSpaceName") :string
+  (color-mode :int))
+
+(cffi:defcfun (%im-color-mode-depth "imColorModeDepth") :int
+  (color-mode :int))
+
+(cffi:defcfun (%im-color-mode-to-bitmap "imColorModeToBitmap") :int
+  (color-mode :int))
+
+(cffi:defcfun (%im-color-mode-is-bitmap "imColorModeIsBitmap") :boolean
+  (color-mode :int)
+  (data-type :int))
+
+(cffi:defcfun (%im-data-type-size "imDataTypeSize") :int
+  (data-type :int))
+
+(cffi:defcfun (%im-data-type-name "imDataTypeName") :string
+  (data-type :int))
+
+(cffi:defcfun (%im-data-type-int-max "imDataTypeIntMax") :unsigned-long
+  (data-type :int))
+
+(cffi:defcfun (%im-data-type-int-min "imDataTypeIntMin") :long
+  (data-type :int))

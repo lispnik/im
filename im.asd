@@ -9,6 +9,7 @@
   :components ((:file "package")
                (:file "version")
                (:file "error")
+               (:file "util")
 	       (:file "im"))
   :depends-on (#:im-cffi
                #:cffi

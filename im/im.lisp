@@ -10,9 +10,13 @@
           file-info
           file-read-image-info))
 
+(defun as-filename (pathnane-or-namestring)
+  (etypecase pathnane-or-namestring
+    (pathname (namestring pathnane-or-namestring))
+    (string pathnane-or-namestring)))
+
 (defun file-open (pathname)
-  ;; TODO pathname designator (see docs for cl:open)
-  (let ((filename pathname))
+  (let ((filename (as-filename pathname)))
     (cffi:with-foreign-object
 	(error-code-ptr :int)
       (let ((result (im-cffi::%im-file-open filename error-code-ptr)))
@@ -20,8 +24,7 @@
 	    result)))))
 
 (defun file-open-as (pathname format)
-  ;; TODO pathname designator (see docs for cl:open)
-  (let ((filename pathname))
+  (let ((filename (as-filename pathname)))
     (cffi:with-foreign-object
 	(error-code-ptr :int)
       (let ((result (im-cffi::%im-file-open-as filename format error-code-ptr)))
@@ -29,8 +32,7 @@
 	    result)))))
 
 (defun file-new (pathname format)
-  ;; TODO pathname designator (see docs for cl:open)
-  (let ((filename pathname))
+  (let ((filename (as-filename pathname)))
     (cffi:with-foreign-object
 	(error-code-ptr :int)
       (let ((result (im-cffi::%im-file-new filename format error-code-ptr)))
@@ -142,6 +144,7 @@
     (im-cffi::%im-file-read-image-info im-file index width-ptr height-ptr color-mode-ptr file-data-type-ptr)
     (values (cffi:mem-ref width-ptr :int)
             (cffi:mem-ref height-ptr :int)
+            (cffi:mem-ref color-mode-ptr :int)
             (cffi:mem-ref file-data-type-ptr :int))))
 
 ;;; image
@@ -165,3 +168,37 @@
                 palette)))
     (setf (palette file) new-palette)
     (file-image-save "/tmp/foo.gif" "GIF" file)))
+
+(define-constant
+    +data-type+
+    '((0 . (unsigned-byte 8))
+      (1 . (signed-byte 16))
+      (2 . (unsigned-byte 16))
+      (3 . (signed-byte 32))
+      (4 . single-float)
+      (5 . double-float)
+      (6 . (complex single-float))
+      (7 . (complex double-float)))
+  :test #'equalp)
+
+(define-constant
+    +color-space+
+    #(:color-space-rgb
+      :color-space-map
+      :color-space-gray
+      :color-space-binary
+      :color-space-cmyk
+      :color-space-ycbcr
+      :color-space-lab
+      :color-space-luv
+      :color-space-xyz)
+  :test #'equalp)
+
+(define-constant +color-mode-config+
+    '((#x100 . :color-mode-alpha)
+      (#x200 . :color-mode-packed)
+      (#x400 . :color-mode-top-down))
+  :test #'equalp)
+
+
+

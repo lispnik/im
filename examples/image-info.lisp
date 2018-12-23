@@ -15,12 +15,15 @@
         :count ,count
         :images ,(loop for index below count
                        collect (multiple-value-bind 
-                                     (width height color-mode datatype)
+                                     (width height color-mode data-type)
                                    (im:file-read-image-info file index)
                                  `(:width ,width
                                    :height ,height
-                                   :color-mode ,color-mode
-                                   :data-type ,datatype)))))))
+                                   :color-mode (:space-name ,(im:color-mode-space-name color-mode)
+                                                :alpha-p nil
+                                                :packed-p nil
+                                                :top-down-p nil)
+                                   :data-type ,(im:data-type-name data-type))))))))
 
-(image-info #p"/home/mkennedy/Downloads/multipage_tif_example.tif")
+(image-info #p"/home/mkennedy/Downloads/MultipleFormats.tif")
 
