@@ -11,7 +11,8 @@
                (:file "error")
                (:file "util")
 	       (:file "im")
-               (:file "format"))
+               (:file "format")
+               (:file "palette"))
   :depends-on (#:im-cffi
                #:cffi
                #:alexandria
