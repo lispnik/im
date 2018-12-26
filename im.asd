@@ -10,7 +10,8 @@
                (:file "version")
                (:file "error")
                (:file "util")
-	       (:file "im"))
+	       (:file "im")
+               (:file "format"))
   :depends-on (#:im-cffi
                #:cffi
                #:alexandria

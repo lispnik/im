@@ -20,40 +20,40 @@
 ;;; im.h
 
 (cffi:defcenum data-type
-  data-type-byte
-  data-type-short
-  data-type-ushort
-  data-type-int
-  data-type-float
-  data-type-double
-  data-type-cfloat
-  data-type-cdouble)
+  :data-type-byte
+  :data-type-short
+  :data-type-ushort
+  :data-type-int
+  :data-type-float
+  :data-type-double
+  :data-type-cfloat
+  :data-type-cdouble)
 
 (cffi:defcenum color-space
-  color-space-rgb
-  color-space-map
-  color-space-gray
-  color-space-binary
-  color-space-cmyk
-  color-space-ycbcr
-  color-space-lab
-  color-space-luv
-  color-space-xyz)
+  :color-space-rgb
+  :color-space-map
+  :color-space-gray
+  :color-space-binary
+  :color-space-cmyk
+  :color-space-ycbcr
+  :color-space-lab
+  :color-space-luv
+  :color-space-xyz)
 
 (cffi:defbitfield color-mode-config
-  (color-mode-config-alpha #x100)
-  (color-mode-config-packed #x200)
-  (color-mode-config-topdown #x400))
+  (:color-mode-config-alpha #x100)
+  (:color-mode-config-packed #x200)
+  (:color-mode-config-topdown #x400))
 
 (cffi:defcenum error-code
-  error-code-none
-  error-code-open
-  error-code-access
-  error-code-format
-  error-code-data
-  error-code-compress
-  error-code-mem
-  error-code-counter)
+  :error-code-none
+  :error-code-open
+  :error-code-access
+  :error-code-format
+  :error-code-data
+  :error-code-compress
+  :error-code-mem
+  :error-code-counter)
 
 (cffi:defctype im-file :pointer)
 
@@ -89,7 +89,7 @@
 
 (cffi:defcfun (%im-file-set-info "imFileSetInfo") :void
   (im-file im-file)
-  (compression :string))
+  (compression :pointer))
 
 (cffi:defcfun (%im-file-set-attribute "imFileSetAttribute") :void
   (im-file im-file)
@@ -151,7 +151,7 @@
   (palette-ptr :pointer)
   (palette-count :int))
 
-(cffi:defcfun (%im-file-read-image-info "imFileReadImageInfo") :void
+(cffi:defcfun (%im-file-read-image-info "imFileReadImageInfo") error-code
   (im-file im-file)
   (index :int)
   (width-ptr :pointer)
@@ -159,7 +159,7 @@
   (file-color-mode-ptr :pointer)
   (file-data-type-ptr :pointer))
 
-(cffi:defcfun (%im-file-write-image-info "imFileWriteImageInfo") :void
+(cffi:defcfun (%im-file-write-image-info "imFileWriteImageInfo") error-code
   (im-file im-file)
   (index :int)
   (width :int)
@@ -167,13 +167,13 @@
   (user-color-mode :int)
   (user-data-type :int))
 
-(cffi:defcfun (%im-file-read-image-data "imFileReadImageData") :int
+(cffi:defcfun (%im-file-read-image-data "imFileReadImageData") error-code
   (im-file im-file)
   (data-ptr :pointer)
   (convert-to-bitmap :boolean)
   (color-mode-flags :int))
 
-(cffi:defcfun (%im-file-write-image-data "imFileWriteImageData") :int
+(cffi:defcfun (%im-file-write-image-data "imFileWriteImageData") error-code
   (im-file im-file)
   (data-ptr :pointer))
 
@@ -184,13 +184,13 @@
   (format-list-ptr :pointer)
   (format-count-ptr :pointer))
 
-(cffi:defcfun (%im-format-info "imFormatInfo") :int
+(cffi:defcfun (%im-format-info "imFormatInfo") error-code
   (format :string)
   (description :pointer)                ;NOTE documented as 50 chars max
   (extensions :pointer)                 ;NOTE documented as 50 chars max, e.g. "*.tif;*.tiff;"
   (can-sequence :pointer))
 
-(cffi:defcfun (%im-format-info-extra "imFormatInfoExtra") :int
+(cffi:defcfun (%im-format-info-extra "imFormatInfoExtra") error-code
   (format :string)
   (extra :pointer))                     ;NOTE documented as 50 chars max
 
@@ -199,7 +199,7 @@
   (compressions-ptr :pointer)		;NOTE documented as 50 compressions max (char* comp[50])
   (compressions-count :pointer)
   (color-mode :int)
-  (data-type data-type))
+  (data-type :int))
 
 (cffi:defcfun (%im-format-can-write-image "imFormatCanWriteImage") :boolean
   (format :string)
@@ -497,6 +497,36 @@
 
 ;;; im_util.h
 
+(cffi:defcfun (%im-image-data-size "imImageDataSize") :int
+  (width :int)
+  (height :int)
+  (color-mode :int)
+  (data-type data-type))
+
+(cffi:defcfun (%im-image-line-size "imImageLineSize") :int
+  (width :int)
+  (color-mode :int)
+  (data-type data-type))
+
+(cffi:defcfun (%im-image-line-count "imImageLineCount") :int
+  (width :int)
+  (color-mode :int))
+
+(cffi:defcfun (%im-image-check-format "imImageCheckFormat") :boolean
+  (color-mode :int)
+  (data-type data-type))
+
+(cffi:defcfun (%im-color-encode "imColorEncode") :long
+  (red :unsigned-char)
+  (green :unsigned-char)
+  (blue :unsigned-char))
+
+(cffi:defcfun (%im-color-decode "imColorDecode") :long
+  (red (:pointer :unsigned-char))
+  (green (:pointer :unsigned-char))
+  (blue (:pointer :unsigned-char))
+  (color :long))
+
 (cffi:defcfun (%im-color-mode-space-name "imColorModeSpaceName") :string
   (color-mode :int))
 
@@ -521,3 +551,5 @@
 
 (cffi:defcfun (%im-data-type-int-min "imDataTypeIntMin") :long
   (data-type :int))
+
+
