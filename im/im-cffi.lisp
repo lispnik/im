@@ -11,6 +11,8 @@
 
 (cffi:use-foreign-library lib-im)
 
+(cffi:defctype palette (:pointer :long))
+
 ;;; im_lib.h
 
 (cffi:defcfun (%im-version "imVersion") :string)
@@ -143,12 +145,12 @@
 
 (cffi:defcfun (%im-file-get-palette "imFileGetPalette") :void
   (im-file im-file)
-  (palette-ptr :pointer)
+  (palette-ptr palette)
   (palette-count-ptr :pointer))
 
 (cffi:defcfun (%im-file-set-palette "imFileSetPalette") :void
   (im-file im-file)
-  (palette-ptr :pointer)
+  (palette-ptr palette)
   (palette-count :int))
 
 (cffi:defcfun (%im-file-read-image-info "imFileReadImageInfo") error-code
@@ -251,7 +253,7 @@
   (color-space color-space)
   (data-type data-type)
   (data-buffer :pointer)
-  (palette (:pointer :long))
+  (palette-ptr palette)
   (palette-count :int))
 
 (cffi:defcfun (%im-image-create-based "imImageCreateBased") im-image
@@ -364,7 +366,7 @@
 
 (cffi:defcfun (%im-image-set-palette "imImageSetPalette") :void
   (im-image im-image)
-  (palette (:pointer :long))
+  (palette palette)
   (palette-count :int))
 
 (cffi:defcfun (%im-image-match-size "imImageMatchSize") :boolean
@@ -552,4 +554,45 @@
 (cffi:defcfun (%im-data-type-int-min "imDataTypeIntMin") :long
   (data-type :int))
 
+;;; im_palette.h
 
+(cffi:defcfun (%im-palette-new "imPaletteNew") palette
+  (count :int))
+
+(cffi:defcfun (%im-palette-release "imPaletteRelease") :void
+  (palette palette))
+
+(cffi:defcfun (%im-palette-duplicate "imPaletteDuplicate") palette
+  (palette palette)
+  (count :int))
+
+(cffi:defcfun (%im-palette-find-nearest "imPaletteFindNearest") :int
+  (palette palette)
+  (count :int)
+  (color :long))
+
+(cffi:defcfun (%im-palette-find-color "imPaletteFindColor") :int
+  (palette palette)
+  (count :int)
+  (color :long)
+  (tol :unsigned-char))
+
+(cffi:defcfun (%im-palette-gray "imPaletteGray") palette)
+(cffi:defcfun (%im-palette-red "imPaletteRed") palette)
+(cffi:defcfun (%im-palette-green "imPaletteGreen") palette)
+(cffi:defcfun (%im-palette-blue "imPaletteBlue") palette)
+(cffi:defcfun (%im-palette-yellow "imPaletteYellow") palette)
+(cffi:defcfun (%im-palette-magenta "imPaletteMagenta") palette)
+(cffi:defcfun (%im-palette-cian "imPaletteCian") palette)
+(cffi:defcfun (%im-palette-rainbow "imPaletteRainbow") palette)
+(cffi:defcfun (%im-palette-hues "imPaletteHues") palette)
+(cffi:defcfun (%im-palette-blue-ice "imPaletteBlueIce") palette)
+(cffi:defcfun (%im-palette-hot-iron "imPaletteHotIron") palette)
+(cffi:defcfun (%im-palette-high-contrast "imPaletteHighContrast") palette)
+(cffi:defcfun (%im-palette-linear "imPaletteLinear") palette)
+(cffi:defcfun (%im-palette-uniform "imPaletteUniform") palette)
+(cffi:defcfun (%im-palette-uniform-index "imPaletteUniformIndex") palette)
+(cffi:defcfun (%im-palette-uniorm-index-halftoned "imPaletteUniformIndexHalftoned") palette)
+
+
+q
