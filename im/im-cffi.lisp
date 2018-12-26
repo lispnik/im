@@ -593,6 +593,3 @@
 (cffi:defcfun (%im-palette-uniform "imPaletteUniform") palette)
 (cffi:defcfun (%im-palette-uniform-index "imPaletteUniformIndex") palette)
 (cffi:defcfun (%im-palette-uniorm-index-halftoned "imPaletteUniformIndexHalftoned") palette)
-
-
-q
