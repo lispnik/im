@@ -133,14 +133,6 @@ compression between frames."
 ;; #+nil  (:method ((new-value string) im-file attribute data-type)
 ;;     (im-cffi::%im-file-set-attribute-string )))
 
-(defun %find-zero (attribute-ptr count)
-  ;; This is adapted from the im_info.c example and seems to be a
-  ;; heuristic for determining a string vs. byte values
-  ;; http://webserver2.tecgraf.puc-rio.br/im/en/storage_samples.html#im_info
-  (loop for i below count
-        when (zerop (cffi:mem-ref attribute-ptr :unsigned-char i))
-          do (return t)))
-
 (defun %complex-attributes (attribute-ptr count data-type)
   ;; complex attributes are pairs of floats or doubles of real and
   ;; imaginary parts
@@ -162,8 +154,11 @@ compression between frames."
                          (:data-type-int :int32)
                          (:data-type-float :float)
                          (:data-type-double :double))))
-        (loop for i below count
-              collect (cffi:mem-aref attribute-ptr cffi-type i)))))
+        (loop with attributes = (make-array count)
+              for i below count
+              do (setf (aref attributes i)
+                       (cffi:mem-aref attribute-ptr cffi-type i))
+              finally (return attributes)))))
 
 (defun file-attribute (im-file attribute)
   (cffi:with-foreign-objects
@@ -172,15 +167,10 @@ compression between frames."
     (let* ((value-ptr (im-cffi::%im-file-get-attribute im-file attribute data-type-ptr count-ptr))
            (data-type (cffi:mem-ref data-type-ptr 'im-cffi::data-type))
            (count (cffi:mem-ref count-ptr :int)))
-      (if (and (eq data-type :data-type-byte)
-               (%find-zero value-ptr count))
-          (values (cffi:foreign-string-to-lisp value-ptr)
-                  data-type
-                  count)
           (let ((attributes (%attributes value-ptr count data-type)))
-            (values (if (= count 1) (car attributes) attributes)
+            (values (if (= count 1) (aref attributes 0) attributes)
              data-type
-             count))))))
+             count)))))
 
 (defun (setf attribute-string) (new-value im-image attribute)
   (im-cffi::%im-image-set-attrib-string im-image attribute new-value)

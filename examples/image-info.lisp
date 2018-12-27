@@ -38,6 +38,7 @@
         ,(loop for index below count
                collect (image-metadata file index))))))
 
+#+nil
 (loop for file in (directory #p"/usr/share/backgrounds/*.jpg")
       collect (image-info file))
 
