@@ -591,5 +591,11 @@
 (cffi:defcfun (%im-palette-high-contrast "imPaletteHighContrast") palette)
 (cffi:defcfun (%im-palette-linear "imPaletteLinear") palette)
 (cffi:defcfun (%im-palette-uniform "imPaletteUniform") palette)
-(cffi:defcfun (%im-palette-uniform-index "imPaletteUniformIndex") palette)
-(cffi:defcfun (%im-palette-uniorm-index-halftoned "imPaletteUniformIndexHalftoned") palette)
+
+(cffi:defcfun (%im-palette-uniform-index "imPaletteUniformIndex") palette
+  (color :long))
+
+(cffi:defcfun (%im-palette-uniform-index-halftoned "imPaletteUniformIndexHalftoned") palette
+  (color :long)
+  (x :int)
+  (y :int))
