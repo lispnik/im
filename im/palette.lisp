@@ -14,7 +14,8 @@
           palette-uniform-index-halftoned))
 
 (defclass palette ()
-  ((data :initform (cffi:null-pointer)
+  ((data :type cffi:foreign-pointer
+         :initform (cffi:null-pointer)
          :reader palette-data)
    (count :type integer
           :initarg :count

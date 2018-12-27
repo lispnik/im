@@ -599,3 +599,31 @@
   (color :long)
   (x :int)
   (y :int))
+
+;;; im_convert.h
+
+;;; imConvertDataType
+;;; imConvertColorSpace
+;;; imConvertToBitmap
+;;; imImageGetOpenGLData
+;;; imImageCreateFromOpenGLData
+
+(cffi:defcfun (%im-convert-packing "imConvertPacking") :void
+  (src-data :pointer)
+  (dst-data :pointer)
+  (width :int)
+  (height :int)
+  (src-depth :int)
+  (dst-depth :int)
+  (data-type data-type)
+  (src-is-packed :boolean))
+
+(cffi:defcfun (%im-convert-map-to-rgb "imConvertMapToRGB") :void
+  (data :pointer)
+  (count :int)
+  (depth :int)
+  (packed :int)
+  (palette palette)
+  (palette-count :int))
+
+;;; imConvertRGB2Map

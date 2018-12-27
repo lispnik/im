@@ -12,7 +12,8 @@
                (:file "util")
 	       (:file "im")
                (:file "format")
-               (:file "palette"))
+               (:file "palette")
+               (:file "convert"))
   :depends-on (#:im-cffi
                #:cffi
                #:alexandria

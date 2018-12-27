@@ -10,6 +10,8 @@
           file-info
           file-image-info
           file-compression
+          file-attribute
+          file-attribute-string
           file-attributes
           file-palette
           file-read-image-info
@@ -131,33 +133,61 @@ compression between frames."
 ;; #+nil  (:method ((new-value string) im-file attribute data-type)
 ;;     (im-cffi::%im-file-set-attribute-string )))
 
-;; (defun file-attribute (im-file attribute)
-;;   (cffi:with-foreign-objects
-;;       ((data-type-ptr 'im-cffi::data-type)
-;;        (count-ptr :int))
-;;     (let* ((value-ptr (im-cffi::%im-file-get-attribute im-file attribute data-type-ptr count-ptr))
-;;            (data-type (cffi:mem-ref data-type-ptr 'im-cffi::data-type)))
-;;       (values (ecase data-type
-;;                 (:data-type-byte (cffi:foreign-string-to-lisp value-ptr))
-;;                 (:data-type-short (cffi:mem-ref value-ptr :short))
-;;                 (:data-type-ushort (cffi:mem-ref value-ptr :unsigned-short))
-;;                 (:data-type-int (cffi:mem-ref value-ptr :int))
-;;                 (:data-type-float (cffi:mem-ref value-ptr :float))
-;;                 (:data-type-double (cffi:mem-ref value-ptr :double))
-;;                 (:data-type-cfloat
-;;                  (complex (cffi:mem-aref value-ptr :float 0)
-;;                           (cffi:mem-aref value-ptr :float 1)))
-;;                 (:data-type-cdouble
-;;                  (complex (cffi:mem-aref value-ptr :double 0)
-;;                           (cffi:mem-aref value-ptr :double 1))))
-;;               (cffi:mem-ref count-ptr :int)))))
+(defun %find-zero (attribute-ptr count)
+  ;; This is adapted from the im_info.c example and seems to be a
+  ;; heuristic for determining a string vs. byte values
+  ;; http://webserver2.tecgraf.puc-rio.br/im/en/storage_samples.html#im_info
+  (loop for i below count
+        when (zerop (cffi:mem-ref attribute-ptr :unsigned-char i))
+          do (return t)))
 
+(defun %complex-attributes (attribute-ptr count data-type)
+  ;; complex attributes are pairs of floats or doubles of real and
+  ;; imaginary parts
+  (let ((cffi-type (ecase data-type
+                     (:data-type-cfloat :float)
+                     (:data-type-cdouble :double))))
+    (loop for i by 2
+          repeat count
+          collect (complex (cffi:mem-aref attribute-ptr cffi-type i)
+                           (cffi:mem-aref attribute-ptr cffi-type (1+ i))))))
 
-;; (defun (setf attribute-string) (new-value im-image attribute)
-;;   (im-cffi::%im-image-set-attrib-string im-image attribute new-value)
-;;   new-value)
-;; (defun attribute-string (im-image attribute)
-;;   (im-cffi::%im-image-get-attrib-string im-image attribute))
+(defun %attributes (attribute-ptr count data-type)
+  (if (member data-type '(:data-type-cfloat :data-type-cdouble))
+      (%complex-attributes attribute-ptr count data-type)
+      (let ((cffi-type (ecase data-type
+                         (:data-type-byte :uint8)
+                         (:data-type-short :int16)
+                         (:data-type-ushort :uint16)
+                         (:data-type-int :int32)
+                         (:data-type-float :float)
+                         (:data-type-double :double))))
+        (loop for i below count
+              collect (cffi:mem-aref attribute-ptr cffi-type i)))))
+
+(defun file-attribute (im-file attribute)
+  (cffi:with-foreign-objects
+      ((data-type-ptr 'im-cffi::data-type)
+       (count-ptr :int))
+    (let* ((value-ptr (im-cffi::%im-file-get-attribute im-file attribute data-type-ptr count-ptr))
+           (data-type (cffi:mem-ref data-type-ptr 'im-cffi::data-type))
+           (count (cffi:mem-ref count-ptr :int)))
+      (if (and (eq data-type :data-type-byte)
+               (%find-zero value-ptr count))
+          (values (cffi:foreign-string-to-lisp value-ptr)
+                  data-type
+                  count)
+          (let ((attributes (%attributes value-ptr count data-type)))
+            (values (if (= count 1) (car attributes) attributes)
+             data-type
+             count))))))
+
+(defun (setf attribute-string) (new-value im-image attribute)
+  (im-cffi::%im-image-set-attrib-string im-image attribute new-value)
+  new-value)
+
+(defun attribute-string (im-image attribute)
+  (im-cffi::%im-image-get-attrib-string im-image attribute))
 
 (defun file-attributes (im-file)
   "Return file attribute names as a list of strings."
@@ -204,13 +234,13 @@ non-empty SEQUENCE of up to 256 colors."
 
 (defun file-read-image-info (im-file &optional (index 0))
   "Reads the image header if any and returns image information.
-Returns the values WIDTH, HEIGHT, COLOR-SPACE, COLOR-MODE-CONFIG and
-DATA-TYPE.
+Returns the values WIDTH, HEIGHT, COLOR-MODE-CONFIG-LIST, COLOR-SPACE
+and DATA-TYPE.
 
 Reads also the extended image attributes, so other image attributes
 will be available only after calling this function. An condition of
-FILE-ACCESS-ERROR is signalled upon error. INDEX specifies the image
-number between 0 and IMAGE-COUNT - 1.
+IM-ERROR is signalled upon error. INDEX specifies the image number
+between 0 and IMAGE-COUNT - 1.
 
 Some drivers read only in sequence, so INDEX can be ignored by the
 format driver. This function must be called at least once, check each
@@ -225,8 +255,8 @@ format documentation."
     (let ((color-mode (cffi:mem-ref color-mode-ptr :int)))
       (values (cffi:mem-ref width-ptr :int)
               (cffi:mem-ref height-ptr :int)
-              (color-mode-space color-mode)
               (color-mode-config color-mode)
+              (color-mode-space color-mode)
               (cffi:mem-ref data-type-ptr 'im-cffi::data-type)))))
 
 (defun file-write-image-info (im-file)

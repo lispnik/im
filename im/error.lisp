@@ -1,10 +1,10 @@
 (in-package #:im)
 
-(export '(file-access-error
+(export '(im-error
 	  error-code
 	  message))
 
-(define-condition file-access-error (error)
+(define-condition im-error (error)
   ((error-code :initarg :error-code
 	       :type integer
 	       :reader error-code)
@@ -12,7 +12,7 @@
 	    :type string
 	    :reader message))
   (:report (lambda (condition stream)
-	     (format stream "File access error with code ~A: ~A"
+	     (format stream "IM error with code ~A: ~A"
 		     (error-code condition)
 		     (message condition)))))
 
@@ -26,15 +26,15 @@
     (:error-code-mem . "Insufficient memory")
     (:error-code-counter . "Interrupted by the counter")))
 
-(defun file-access-error-from-code (error-code)
+(defun im-error-from-code (error-code)
   (let ((error-message (assoc-value *error-code-messages* error-code)))
     (if error-message
-	(make-instance 'file-access-error
+	(make-instance 'im-error
 		       :error-code error-code
 		       :message error-message)
 	(error "Unknown error code ~A" error-code))))
 
 (defun maybe-error (error-code)
   (unless (eq :error-code-none error-code)
-    (error (file-access-error-from-code error-code))))
+    (error (im-error-from-code error-code))))
 

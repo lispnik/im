@@ -40,7 +40,7 @@ CAN-SEQUENCE-P. e.g.
 
 \"Tagged Image File Format\", (\"*.tif\" \"*.tiff\"), T
 
-A FILE-ACCESS-ERROR is signaled on error."
+A IM-ERROR is signaled on error."
   (cffi:with-foreign-objects
       ((desc-ptr :char 50)
        (ext-ptr :char 50)
@@ -111,7 +111,7 @@ COLOR-MODE-CONFIG-LIST, COLOR-SPACE and DATA-TYPE. e.g.
 (defun format-can-write-image-p
     (format compression color-mode-config-list color-space data-type)
   "Checks if the format support the given image class at the given
-compression. Signals a FILE-ACCESS-ERROR condition on an error."
+compression. Signals a IM-ERROR condition on an error."
   (let ((color-mode (%encode-color-mode color-mode-config-list color-space)))
     (im-cffi::%im-format-can-write-image
      format
