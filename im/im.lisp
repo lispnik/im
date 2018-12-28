@@ -17,7 +17,7 @@
           file-read-image-info
           file-write-image-info))
 
-(defun as-filename (pathnane-or-namestring)
+(defun %as-filename (pathnane-or-namestring)
   (etypecase pathnane-or-namestring
     (pathname (namestring pathnane-or-namestring))
     (string pathnane-or-namestring)))
@@ -25,7 +25,7 @@
 (defun file-open (pathname)
   "Opens the file for reading. It must exists. Also reads file
 header. It will try to identify the file format."
-  (let ((filename (as-filename pathname)))
+  (let ((filename (%as-filename pathname)))
     (cffi:with-foreign-object
 	(error-code-ptr 'im-cffi::error-code)
       (let ((result (im-cffi::%im-file-open filename error-code-ptr)))
@@ -35,7 +35,7 @@ header. It will try to identify the file format."
 (defun file-open-as (pathname format)
   "Opens the file for reading using a specific format. It must
 exists. Also reads file header."
-  (let ((filename (as-filename pathname)))
+  (let ((filename (%as-filename pathname)))
     (cffi:with-foreign-object
 	(error-code-ptr 'im-cffi::error-code)
       (let ((result (im-cffi::%im-file-open-as filename format error-code-ptr)))
@@ -46,7 +46,7 @@ exists. Also reads file header."
   "Creates a new file for writing using a specific format. If the file
 exists will be replaced. It will only initialize the format driver and
 create the file, no data is actually written."
-  (let ((filename (as-filename pathname)))
+  (let ((filename (%as-filename pathname)))
     (cffi:with-foreign-object
 	(error-code-ptr 'im-cffi::error-code)
       (let ((result (im-cffi::%im-file-new filename format error-code-ptr)))
@@ -117,21 +117,9 @@ compression between frames."
       (im-cffi::%im-file-set-info im-file (cffi:null-pointer)))
   compression)
 
-;; (defgeneric (setf file-attribute) (new-value im-file attribute data-type)
-;;   (:method ((new-value real) im-file attribute data-type)
-;;     (im-cffi::%im-file-set-attribute-real
-;;      im-file
-;;      attribute
-;;      data-type
-;;      (coerce new-value 'double-float)))
-;;   (:method ((new-value integer) im-file attribute data-type)
-;;     (im-cffi::%im-file-set-attribute-integer
-;;      im-file
-;;      attribute
-;;      data-type
-;;      (coerce new-value '(signed-byte #.(* 8 (cffi:foreign-type-size :int))))))
-;; #+nil  (:method ((new-value string) im-file attribute data-type)
-;;     (im-cffi::%im-file-set-attribute-string )))
+(defun (setf file-attribute) (value-or-values im-file attribute data-type)
+  ;; TODO
+  )
 
 (defun %complex-attributes (attribute-ptr count data-type)
   ;; complex attributes are pairs of floats or doubles of real and
@@ -161,6 +149,9 @@ compression between frames."
               finally (return attributes)))))
 
 (defun file-attribute (im-file attribute)
+  "Return the value, or values of ATTRIBUTE within IM-FILE. If there
+are more than one value for an attribute, then they are returned as a
+SEQUENCE of values."
   (cffi:with-foreign-objects
       ((data-type-ptr 'im-cffi::data-type)
        (count-ptr :int))
@@ -168,15 +159,18 @@ compression between frames."
            (data-type (cffi:mem-ref data-type-ptr 'im-cffi::data-type))
            (count (cffi:mem-ref count-ptr :int)))
           (let ((attributes (%attributes value-ptr count data-type)))
-            (values (if (= count 1) (aref attributes 0) attributes)
+            (values
+             (if (= count 1) (aref attributes 0) attributes)
              data-type
              count)))))
 
-(defun (setf attribute-string) (new-value im-image attribute)
-  (im-cffi::%im-image-set-attrib-string im-image attribute new-value)
+(defun (setf file-attribute-string) (new-value im-file attribute)
+  "Set the string value of ATTRIBUTE."
+  (im-cffi::%im-file-set-attribute-string im-file attribute new-value)
   new-value)
 
-(defun attribute-string (im-image attribute)
+(defun file-attribute-string (im-image attribute)
+  "Get the string value of ATTRIBUTE."
   (im-cffi::%im-image-get-attrib-string im-image attribute))
 
 (defun file-attributes (im-file)

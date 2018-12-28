@@ -115,7 +115,6 @@
 (cffi:defcfun (%im-file-set-attribute-string "imFileSetAttribString") :void
   (im-file im-file)
   (attribute :string)
-  (data-type data-type)
   (value :string))
 
 (cffi:defcfun (%im-file-get-attribute "imFileGetAttribute") :pointer
