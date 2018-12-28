@@ -43,6 +43,7 @@
   :color-space-xyz)
 
 (cffi:defbitfield color-mode-config
+  (:color-mode-config-default 0)        ;unpacked, no alpha, bottom-up
   (:color-mode-config-alpha #x100)
   (:color-mode-config-packed #x200)
   (:color-mode-config-topdown #x400))

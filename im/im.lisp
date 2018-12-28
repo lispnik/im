@@ -11,11 +11,14 @@
           file-image-info
           file-compression
           file-attribute
+          file-attribute-1
           file-attribute-string
           file-attributes
           file-palette
           file-read-image-info
-          file-write-image-info))
+          file-write-image-info
+          file-read-image-data
+          file-write-image-data))
 
 (defun %as-filename (pathnane-or-namestring)
   (etypecase pathnane-or-namestring
@@ -149,9 +152,9 @@ compression between frames."
               finally (return attributes)))))
 
 (defun file-attribute (im-file attribute)
-  "Return the value, or values of ATTRIBUTE within IM-FILE. If there
-are more than one value for an attribute, then they are returned as a
-SEQUENCE of values."
+  "Return the value, or values of ATTRIBUTE within IM-FILE. In
+general, attributes are multi-valued, thus they attribute value is a
+sequence."
   (cffi:with-foreign-objects
       ((data-type-ptr 'im-cffi::data-type)
        (count-ptr :int))
@@ -159,10 +162,15 @@ SEQUENCE of values."
            (data-type (cffi:mem-ref data-type-ptr 'im-cffi::data-type))
            (count (cffi:mem-ref count-ptr :int)))
           (let ((attributes (%attributes value-ptr count data-type)))
-            (values
-             (if (= count 1) (aref attributes 0) attributes)
-             data-type
-             count)))))
+            (values attributes data-type count)))))
+
+(defun file-attribute-1 (im-file attribute)
+  "Like FILE-ATTRIBUTE but returns the first value for ATTRIBUTE."
+  (multiple-value-bind
+        (attributes data-type count)
+      (file-attribute im-file attribute)
+    (assert (> count 1))
+    (values (elt attributes 0) data-type count)))
 
 (defun (setf file-attribute-string) (new-value im-file attribute)
   "Set the string value of ATTRIBUTE."
@@ -247,11 +255,34 @@ format documentation."
   ;; FIXME
   )
 
-(defun file-read-image-data (im-file)
-  ;; FIXME
-  )
+(defun file-read-image-data
+    (im-file data-ptr &optional convert-to-bitmap-p color-mode-config)
+  "Reads the image data with or without conversion. 
+
+The data can be converted to bitmap when reading using
+CONVERT-TO-BITMAP-P. Data type conversion to byte will always scan for
+min-max then scale to 0-255, except integer values that min-max are
+already between 0-255. Complex to real conversions will use the
+magnitude.
+
+COLOR-MODE-CONFIG contains packed, alpha and top-bottom
+information. If COLOR-MODE-CONFIG contains :COLOR-MODE-CONFIG-DEFAULT,
+then unpacked, no alpha and bottom up is used. If COLOR-MODE-CONFIG is
+NIL the file original flags are used.
+
+Signals IM-ERROR on an error."
+  (maybe-error
+   (im-cffi::%im-file-read-image-data
+    im-file
+    data-ptr
+    convert-to-bitmap-p
+    (if color-mode-config
+        (im::%encode-color-mode-config color-mode-config)
+        -1)))
+  data-ptr)
 
 (defun file-write-image-data (im-file)
+
   ;; FIXME
   )
 

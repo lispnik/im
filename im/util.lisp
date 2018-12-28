@@ -29,6 +29,9 @@
    (cffi:foreign-bitfield-value 'im-cffi::color-mode-config color-mode-config)
    (cffi:foreign-enum-value 'im-cffi::color-space color-space)))
 
+(defun %encode-color-mode-config (color-mode-config)
+  (cffi:foreign-bitfield-value 'im-cffi::color-mode-config color-mode-config))
+
 (defun image-data-size (width height color-mode-config color-space data-type)
   "Returns the size of the data buffer."
   (im-cffi::%im-image-data-size
