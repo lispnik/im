@@ -10,6 +10,7 @@
           file-info
           file-image-info
           file-compression
+          file-remove-attribute
           file-attribute
           file-attribute-1
           file-attribute-string
@@ -120,16 +121,58 @@ compression between frames."
       (im-cffi::%im-file-set-info im-file (cffi:null-pointer)))
   compression)
 
+(defun %cffi-type (data-type)
+  (ecase data-type
+    (:data-type-byte :uint8)
+    (:data-type-short :int16)
+    (:data-type-ushort :uint16)
+    (:data-type-int :int32)
+    (:data-type-float :float)
+    (:data-type-double :double)
+    (:data-type-cfloat :float)
+    (:data-type-cdouble :double)))
+
+
+(defun file-remove-attribute (im-file attribute)
+  "Removes an extended attribute."
+  (im-cffi::%im-file-set-attribute
+   im-file attribute
+   :data-type-int                       ;data-type and count are ignored
+   0
+   (cffi:null-pointer)))
+
 (defun (setf file-attribute) (values im-file attribute data-type)
-  ;; TODO
-  )
+  "Changes an extended attribute."
+  (let ((count (length values))
+        (cffi-type (%cffi-type data-type)))
+    (if (member data-type '(:data-type-cfloat :data-type-cdouble))
+        (with-foreign-object
+            (value-ptr cffi-type (* count 2))
+          (loop for i by 2
+                repeat count
+                for complex-value = (elt values i)
+                do (setf (cffi:mem-aref value-ptr cffi-type i)
+                         (realpart complex-value)
+                         (cffi:mem-aref value-ptr cffi-type (1+ i))
+                         (imagpart complex-value)))
+          (im-cffi::%im-file-set-attribute
+           im-file attribute data-type count value-ptr))
+        (with-foreign-object
+            (value-ptr cffi-type count)
+          (dotimes (i count)
+            (setf (cffi:mem-aref value-ptr cffi-type i)
+                  (elt values i)))
+          (im-cffi::%im-file-set-attribute
+           im-file
+           attribute
+           data-type
+           count value-ptr))))
+  values)
 
 (defun %complex-attributes (attribute-ptr count data-type)
   ;; complex attributes are pairs of floats or doubles of real and
   ;; imaginary parts
-  (let ((cffi-type (ecase data-type
-                     (:data-type-cfloat :float)
-                     (:data-type-cdouble :double))))
+  (let ((cffi-type (%cffi-type data-type)))
     (loop for i by 2
           repeat count
           collect (complex (cffi:mem-aref attribute-ptr cffi-type i)
@@ -138,13 +181,7 @@ compression between frames."
 (defun %attributes (attribute-ptr count data-type)
   (if (member data-type '(:data-type-cfloat :data-type-cdouble))
       (%complex-attributes attribute-ptr count data-type)
-      (let ((cffi-type (ecase data-type
-                         (:data-type-byte :uint8)
-                         (:data-type-short :int16)
-                         (:data-type-ushort :uint16)
-                         (:data-type-int :int32)
-                         (:data-type-float :float)
-                         (:data-type-double :double))))
+      (let ((cffi-type (%cffi-type data-type)))
         (loop with attributes = (make-array count)
               for i below count
               do (setf (aref attributes i)

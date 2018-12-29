@@ -36,7 +36,7 @@
                     (multiple-value-bind
                           (attributes data-type)
                         (im:file-attribute input-file attribute)
-                      (setf (file-attribute input-file attribute data-type)
+                      (setf (im:file-attribute input-file attribute data-type)
                             attributes)))
                   (when (eq color-space :color-space-map)
                     (let ((palette (im:file-palette input-file)))
@@ -49,5 +49,10 @@
                   (im:file-write-image-data output-file data-ptr)))))))))
 
 #+nil
-(loop for file in (directory #p"/usr/share/backgrounds/*.jpg")
-      collect (image-info file))
+(loop for in-file in (directory #p"/usr/share/backgrounds/*.jpg")
+      for out-file = (merge-pathnames
+                      (make-pathname :name (pathname-name in-file) 
+                                     :type "png")
+                      #p"/tmp/")
+      do (format t "~&~S" out-file)
+      do (image-copy in-file out-file "PNG"))
