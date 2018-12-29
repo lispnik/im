@@ -120,7 +120,7 @@ compression between frames."
       (im-cffi::%im-file-set-info im-file (cffi:null-pointer)))
   compression)
 
-(defun (setf file-attribute) (value-or-values im-file attribute data-type)
+(defun (setf file-attribute) (values im-file attribute data-type)
   ;; TODO
   )
 
@@ -251,9 +251,24 @@ format documentation."
               (color-mode-space color-mode)
               (cffi:mem-ref data-type-ptr 'im-cffi::data-type)))))
 
-(defun file-write-image-info (im-file)
-  ;; FIXME
-  )
+(defun file-write-image-info
+    (im-file width height color-mode-config color-space data-type)
+  "Writes the image header. Writes the file header at the first time
+it is called. Also writes the extended image attributes.
+
+Must call imFileSetPalette and set other attributes before calling
+this function. In some formats the color space will be converted to
+match file format specification.
+
+Signals IM-ERROR on an error. This function must be called at least
+once, check the documentation for each format."
+  (maybe-error
+   (im-cffi::%im-file-write-image-info
+    im-file
+    width
+    height
+    (%encode-color-mode color-mode-config color-space)
+    data-type)))
 
 (defun file-read-image-data
     (im-file data-ptr &optional convert-to-bitmap-p color-mode-config)
@@ -281,10 +296,11 @@ Signals IM-ERROR on an error."
         -1)))
   data-ptr)
 
-(defun file-write-image-data (im-file)
+(defun file-write-image-data (im-file data-ptr)
+  "Writes the image data. 
 
-  ;; FIXME
-  )
+Signals IM-ERROR on an error."
+  (maybe-error (im-cffi::%im-file-write-image-data im-file data-ptr)))
 
 #+nil
 (let ((im-file (file-open "exif-samples/tiff/Jobagent.tiff")))

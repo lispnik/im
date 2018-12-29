@@ -163,11 +163,10 @@
 
 (cffi:defcfun (%im-file-write-image-info "imFileWriteImageInfo") error-code
   (im-file im-file)
-  (index :int)
   (width :int)
   (height :int)
-  (user-color-mode :int)
-  (user-data-type :int))
+  (color-mode :int)
+  (data-type data-type))
 
 (cffi:defcfun (%im-file-read-image-data "imFileReadImageData") error-code
   (im-file im-file)
