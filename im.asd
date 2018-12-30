@@ -17,4 +17,5 @@
   :depends-on (#:im-cffi
                #:cffi
                #:alexandria
-               #:serapeum))
+               #:serapeum
+               #:log4cl))

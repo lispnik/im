@@ -166,7 +166,8 @@ compression between frames."
            im-file
            attribute
            data-type
-           count value-ptr))))
+           count
+           value-ptr))))
   values)
 
 (defun %complex-attributes (attribute-ptr count data-type)
@@ -338,11 +339,3 @@ Signals IM-ERROR on an error."
 
 Signals IM-ERROR on an error."
   (maybe-error (im-cffi::%im-file-write-image-data im-file data-ptr)))
-
-#+nil
-(let ((im-file (file-open "exif-samples/tiff/Jobagent.tiff")))
-  (unwind-protect
-       (progn
-         (file-palette im-file))
-    (file-close im-file)))
-

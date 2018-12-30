@@ -1,7 +1,5 @@
 (in-package #:im)
 
-;;; FIXME  eliminate color-mode from the public API (use the decoded values explicitly)
-
 (export '(image-data-size
           image-line-size
           image-line-count
@@ -25,7 +23,7 @@
           +maximum-depth+))
 
 (defun %encode-color-mode (color-mode-config color-space)
-  (logand
+  (logior
    (cffi:foreign-bitfield-value 'im-cffi::color-mode-config color-mode-config)
    (cffi:foreign-enum-value 'im-cffi::color-space color-space)))
 
@@ -34,21 +32,23 @@
 
 (defun image-data-size (width height color-mode-config color-space data-type)
   "Returns the size of the data buffer."
-  (im-cffi::%im-image-data-size
-   width
-   height
-   (%encode-color-mode color-mode-config color-space)
-   data-type))
+  (let ((color-mode (%encode-color-mode color-mode-config color-space)))
+    (im-cffi::%im-image-data-size
+     width
+     height
+     color-mode
+     data-type)))
 
 (defun image-line-size (width color-mode-config color-space data-type)
   "Returns the size of one line of the data buffer. 
 
 This depends if the components are packed. If packed includes all
 components, if not includes only one."
-  (im-cffi::%im-image-line-size
-   width
-   (%encode-color-mode color-mode-config color-space)
-   data-type))
+  (let ((color-mode (%encode-color-mode color-mode-config color-space)))
+    (im-cffi::%im-image-line-size
+     width
+     color-mode
+     data-type)))
 
 (defun image-line-count (width color-mode-config color-space)
   "Returns the number of elements of one line of the data buffer.
@@ -117,5 +117,3 @@ Compatible with CD library definition."
   (zerop (lognand color-mode im-cffi::color-mode-config-topdown)))
 
 (defconstant +maximum-depth+ 5)
-
-

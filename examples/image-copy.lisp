@@ -4,8 +4,21 @@
 
 (in-package #:im-examples.image-copy)
 
+;;; image-copy exercises most of the IM representation API
+
+;;; Example usage:
+
+#+nil
+(loop for in-file in (directory #p"/usr/share/backgrounds/*.jpg")
+      for out-file = (merge-pathnames
+                      (make-pathname :name (pathname-name in-file) 
+                                     :type "tif")
+                      #p"/tmp/")
+      do (image-copy in-file out-file "TIFF"))
+
 (defun image-copy
     (input-pathname output-pathname &optional output-format output-compression)
+  "Copy and optionally convert one file to another."
   #+windows (im-wmv:format-register-wmv)
   #+windows (im-avi:format-register-avi)
   (im:with-open-file (input-file (im:file-open input-pathname))
@@ -28,7 +41,6 @@
                                 width height
                                 color-mode-config color-space
                                 data-type)))
-                ;; FIXME cffi should not be needed at this level?? probably need to expose raw data like IM does
                 (cffi:with-foreign-object
                     (data-ptr :pointer data-size)
                   (im:file-read-image-data input-file data-ptr nil nil)
@@ -47,12 +59,3 @@
                    color-mode-config color-space
                    data-type)
                   (im:file-write-image-data output-file data-ptr)))))))))
-
-#+nil
-(loop for in-file in (directory #p"/usr/share/backgrounds/*.jpg")
-      for out-file = (merge-pathnames
-                      (make-pathname :name (pathname-name in-file) 
-                                     :type "png")
-                      #p"/tmp/")
-      do (format t "~&~S" out-file)
-      do (image-copy in-file out-file "PNG"))

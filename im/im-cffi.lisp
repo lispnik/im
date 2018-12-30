@@ -81,9 +81,6 @@
   (im-file im-file)
   (index :int))
 
-;;; FIXME NOTE this is a rather dangerous function to call. Instead of
-;;; exposing this, expose the FileFormat, FileCompression and
-;;; FileImageCount attributes of imFile instead.
 (cffi:defcfun (%im-file-get-info "imFileGetInfo") :void
   (im-file im-file)
   (format-ptr :pointer)
@@ -422,7 +419,7 @@
 (cffi:defcfun (%im-file-load-image-region "imFileLoadImageRegion") im-image
   (im-file im-file)
   (index :int)
-  (bitmap :boolean)                     ;FIXME check
+  (bitmap :boolean)
   (error (:pointer :int))
   (xmin :int)
   (xmax :int)
@@ -454,7 +451,7 @@
 (cffi:defcfun (%im-file-image-load-region "imFileImageLoadRegion") im-image
   (filename :string)
   (index :int)
-  (bitmap :boolean)                     ;FIXME check
+  (bitmap :boolean)
   (error (:pointer :int))
   (xmin :int)
   (xmax :int)
@@ -467,34 +464,6 @@
   (filename :string)
   (format :string)
   (im-image im-image))
-
-;;; TODO
-;; /** Utility macro to draw the image in a CD library canvas.
-;;  * Works only for data_type IM_BYTE, and color spaces: IM_RGB, IM_MAP, IMGRAY and IM_BINARY.
-;;  * \ingroup imgclass */
-;; #define imcdCanvasPutImage(_canvas, _image, _x, _y, _w, _h, _xmin, _xmax, _ymin, _ymax)     \
-;;   {                                                                         \
-;;     if (_image->color_space == IM_RGB)                                      \
-;;     {                                                                       \
-;;       if (_image->has_alpha)                                                \
-;;         cdCanvasPutImageRectRGBA(_canvas, _image->width, _image->height,    \
-;;                           (unsigned char*)_image->data[0],                  \
-;;                           (unsigned char*)_image->data[1],                  \
-;;                           (unsigned char*)_image->data[2],                  \
-;;                           (unsigned char*)_image->data[3],                  \
-;;                           _x, _y, _w, _h, _xmin, _xmax, _ymin, _ymax);      \
-;;       else                                                                  \
-;;         cdCanvasPutImageRectRGB(_canvas, _image->width, _image->height,     \
-;;                           (unsigned char*)_image->data[0],                  \
-;;                           (unsigned char*)_image->data[1],                  \
-;;                           (unsigned char*)_image->data[2],                  \
-;;                           _x, _y, _w, _h, _xmin, _xmax, _ymin, _ymax);      \
-;;     }                                                                       \
-;;     else                                                                    \
-;;       cdCanvasPutImageRectMap(_canvas, _image->width, _image->height,       \
-;;                         (unsigned char*)_image->data[0], _image->palette,   \
-;;                         _x, _y, _w, _h, _xmin, _xmax, _ymin, _ymax);        \
-;;   }                                                                               
 
 ;;; im_util.h
 

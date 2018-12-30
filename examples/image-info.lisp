@@ -4,6 +4,14 @@
 
 (in-package #:im-examples.image-info)
 
+;;; image-info exercises most of the image attribute API
+
+;;; Example usage:
+
+#+nil
+(loop for file in (directory #p"/usr/share/backgrounds/*.jpg")
+      collect (image-info file))
+
 (defun image-metadata (file index)
   (multiple-value-bind 
         (width height
@@ -26,6 +34,7 @@
                                         (im:file-attribute file attribute)))))))
 
 (defun image-info (pathname)
+  "Retuns information about an image as an ALIST."
   (im:with-open-file (file (im:file-open (if (pathnamep pathname) (namestring pathname) pathname)))
     (multiple-value-bind
           (format compression count)
@@ -37,10 +46,3 @@
         :images
         ,(loop for index below count
                collect (image-metadata file index))))))
-
-#+nil
-(loop for file in (directory #p"/usr/share/backgrounds/*.jpg")
-      collect (image-info file))
-
-
-
