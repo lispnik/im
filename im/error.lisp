@@ -6,7 +6,6 @@
 
 (define-condition im-error (error)
   ((error-code :initarg :error-code
-	       :type integer
 	       :reader error-code)
    (message :initarg :message
 	    :type string
