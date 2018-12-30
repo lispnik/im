@@ -10,8 +10,10 @@
      data-type
      src-packed-p)
   ;; TODO
+  (error "not implemented")
   )
 
 (defun convert-map-to-rgb (data-ptr count depth packed-p palette)
   ;; TODO
+  (error "not implemented")
   )
