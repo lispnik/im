@@ -78,7 +78,7 @@ Load the examples system with `(ql:quickload '("im" "im-examples"))`.
 
 ### Image Copy
 
-[image-copy.lisp](http://www.github.com/lispnik/im/examples/image-copy.lisp)
+[image-copy.lisp](https://github.com/lispnik/im/blob/master/examples/image-copy.lisp)
 
 Load a JPEG image, convert to TIFF with LZW compression and write the
 output to file.
@@ -94,7 +94,7 @@ NIL
 
 ### Image Info
 
-[image-info.lisp](http://www.github.com/lispnik/im/examples/image-info.lisp)
+[image-info.lisp](https://github.com/lispnik/im/blob/master/examples/image-info.lisp)
 
 Return information about a JPEG image as an associative list.
 
