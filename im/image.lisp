@@ -30,7 +30,9 @@
            #:set-binary
            #:set-gray
            #:make-binary
-           #:make-gray))
+           #:make-gray
+           #:width
+           #:height))
 
 (in-package #:im-image)
 
@@ -177,3 +179,11 @@ in-place. Color space is not changed. Data type must be IM_BYTE.")
 (defalias make-gray #'im-cffi::%im-image-make-gray
   "Changes a binary data (0,1) into a gray BYTE data (0,255), done
 in-place. Color space is not changed. Data type must be IM_BYTE.")
+
+(defun width (im-image)
+  (cffi:foreign-slot-value
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::width))
+
+(defun height (im-image)
+  (cffi:foreign-slot-value
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::width))
