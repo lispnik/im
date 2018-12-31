@@ -2,7 +2,8 @@
   (:use #:common-lisp
 	#:cffi
 	#:serapeum)
-  (:shadow #:count)
+  (:shadow #:count
+           #:sequence)
   (:export #:data
            #:count
            #:sequence

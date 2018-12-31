@@ -2,6 +2,7 @@
   (:use #:common-lisp
 	#:cffi
 	#:serapeum)
+  (:shadow #:reshape)
   (:export #:create
            #:init
            #:create-based
