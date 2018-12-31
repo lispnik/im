@@ -24,14 +24,21 @@
            #:read-image-info
            #:write-image-info
            #:read-image-data
-           #:write-image-data))
+           #:write-image-data
+           #:load-image-frame
+           #:load-bitmap
+           #:load-image-region
+           #:load-bitmap-frame
+           #:save-image
+           #:image-load
+           #:image-load-bitmap
+           #:image-load-region
+           #:image-save))
 
 (in-package #:im-file)
 
-(defun %as-filename (pathnane-or-namestring)
-  (etypecase pathnane-or-namestring
-    (pathname (namestring pathnane-or-namestring))
-    (string pathnane-or-namestring)))
+(defun %as-filename (pathname-or-namestring)
+  (namestring (translate-logical-pathname pathname-or-namestring)))
 
 (defun open (pathname)
   "Opens the file for reading. It must exists. Also reads file
@@ -111,15 +118,15 @@ These values are also available as IM-FILE attributes: \"FileFormat\",
 
 (defun compression (im-file)
   "Returns the compression method."
-  (nth-value 1 (file-info im-file)))
+  (nth-value 1 (info im-file)))
 
 (defun (setf compression) (compression im-file)
   "Changes the write compression method. 
 
 If the compression is not supported, and error will be signaled when
-writing.  Use NIL to set the default compression. You can use the
-FILE-INFO to retrieve the actual compression but only after
-FILE-WRITE-IMAGE-INFO. Only a few formats allow you to change the
+writing.  Use NIL to set the default compression. You can use the INFO
+to retrieve the actual compression but only after
+WRITE-IMAGE-INFO. Only a few formats allow you to change the
 compression between frames."
   (if compression
       (cffi:with-foreign-string
@@ -209,7 +216,7 @@ sequence."
             (values attributes data-type count)))))
 
 (defun attribute-1 (im-file attribute)
-  "Like FILE-ATTRIBUTE but returns the first value for ATTRIBUTE."
+  "Like ATTRIBUTE but returns the first value for ATTRIBUTE."
   (multiple-value-bind
         (attributes data-type count)
       (attribute im-file attribute)
@@ -345,3 +352,176 @@ Signals IM-ERROR on an error."
 
 Signals IM-ERROR on an error."
   (im::maybe-error (im-cffi::%im-file-write-image-data im-file data-ptr)))
+
+;;; these are defined in im_image.h, but are "im-file" related
+
+(defun load-image (im-file &optional (index 0))
+  "Loads an image from an already open file.
+
+This will call READ-IMAGE-INFO and READ-IMAGE-DATA. INDEX specifies
+the image number starting at 0. The returned image will be of the same
+color space and data type of the image in the file. Attributes from
+the file will be stored at the image.
+
+Signals IM-ERROR on an error."
+  (cffi:with-foreign-object
+      (error-ptr 'im-cffi::error-code)
+    (prog1
+        (im-cffi::%im-file-load-image im-file index error-ptr)
+      (im::maybe-error (cffi:mem-ref error-ptr 'im-cffi::error-code)))))
+
+(defun load-image-frame (im-file im-image &optional (index 0))
+  "Loads an image from an already open file.
+
+This function assumes that the image in the file has the same
+parameters as the given image. This will call READ-IMAGE-INFO and
+READ-IMAGE-DATA. INDEX specifies the image number starting at 0. The
+returned image will be of the same color space and data type of the
+image in the file. Attributes from the file will be stored at the
+image.
+
+Signals IM-ERROR on an error."
+  (cffi:with-foreign-object
+      (error-ptr 'im-cffi::error-code)
+    (prog1
+        (im-cffi::%im-file-load-image-frame im-file index im-image error-ptr)
+      (im::maybe-error (cffi:mem-ref error-ptr 'im-cffi::error-code)))))
+
+(defun load-bitmap (im-file &optional (index 0))
+  "Loads an image from an already open file, but forces the image to
+be a bitmap.
+
+The returned imagem will be always a bitmap image, with color space
+:COLOR-SPACE-RGB, :COLOR-SPACE-MAP, :COLOR-SPACE-GRAY or :COLOR-SPACE-BINARY, 
+and data type :DATA-TYPE-BYTE.
+
+INDEX specifies the image number. Attributes from the file will be
+stored at the image.
+
+Signals IM-ERROR on error."
+  (cffi:with-foreign-object
+      (error-ptr 'im-cffi::error-code)
+    (prog1
+        (im-cffi::%im-file-load-bitmap im-file index error-ptr)
+      (im::maybe-error (cffi:mem-ref error-ptr 'im-cffi::error-code)))))
+
+(defun load-image-region
+    (im-file bitmap-p xmin xmax ymin ymax width height &optional (index 0))
+  "Loads an image region from an already open file. 
+
+This will call READ-IMAGE-INFO and READ-IMAGE-DATA. INDEX specifies
+the image number.  The returned image will be of the same color space
+and data type of the image in the file, or will be a bitmap
+image. Attributes from the file will be stored at the image.
+
+For now, it works only for the ECW file format.
+
+Signals IM-ERROR on error"
+  (cffi:with-foreign-object
+      (error-ptr 'im-cffi::error-code)
+    (prog1
+        (im-cffi::%im-file-load-image-region
+         im-file
+         index
+         bitmap-p
+         error-ptr
+         xmin xmax
+         ymin ymax
+         width height)
+      (im::maybe-error (cffi:mem-ref error-ptr 'im-cffi::error-code)))))
+
+(defun load-bitmap-frame (im-file im-image &optional (index 0))
+  "Loads an image from an already open file, but forces the image to be a bitmap.
+
+This function assumes that the image in the file has the same
+parameters as the given image.  The image must be a bitmap image, with
+color space :COLOR-SPACE-RGB, :COLOR-SPACE-MAP, :COLOR-SPACE-GRAY
+or :COLOR-SPACE-BINARY, and datatype :DATA-TYPE-BYTE. INDEX specifies
+the image number. Attributes from the file will be stored at the
+image.
+
+Signals IM-ERROR on error."
+  (cffi:with-foreign-object
+      (error-ptr 'im-cffi::error-code)
+    (prog1
+        (im-cffi::%im-file-load-bitmap-frame im-file index im-image error-ptr)
+      (im::maybe-error (cffi:mem-ref error-ptr 'im-cffi::error-code)))))
+
+(defun save-image (im-file im-image)
+  "Saves the image to an already open file. 
+
+This will call WRITE-IMAGE-INFO and WRITE-IMAGE-DATA. Attributes from
+the image will be stored in the file.
+
+Signals IM-ERROR on error."
+  (im::maybe-error (im-cffi::%im-file-save-image im-file im-image)))
+
+(defun image-load (pathname-or-namestring &optional (index 0))
+  "Loads an image from file. 
+
+Open, loads and closes the file. INDEX specifies the image
+number. Attributes from the file will be stored at the image.
+
+Signals IM-ERROR on error."
+  (cffi:with-foreign-object
+      (error-ptr 'im-cffi::error-code)
+    (prog1
+        (im-cffi::%im-file-image-load
+         (%as-filename pathname-or-namestring)
+         index
+         error-ptr)
+      (im::maybe-error (cffi:mem-ref error-ptr 'im-cffi::error-code)))))
+
+(defun image-load-bitmap (pathname-or-namestring &optional (index 0))
+  "Loads an image from file, but forces the image to be a bitmap.
+
+Open, loads and closes the file. INDEX specifies the image
+number. Attributes from the file will be stored at the image.
+
+Signals IM-ERROR on error."
+  (cffi:with-foreign-object
+      (error-ptr 'im-cffi::error-code)
+    (prog1
+        (im-cffi::%im-file-image-load-bitmap
+         (%as-filename pathname-or-namestring)
+         index
+         error-ptr)
+      (im::maybe-error (cffi:mem-ref error-ptr 'im-cffi::error-code)))))
+
+(defun image-load-region
+    (pathname-or-namestring bitmap-p xmin xmax ymin ymax width height &optional (index 0))
+  "Loads an image region from file.
+
+This will call READ-IMAGE-INFO and READ-IMAGE-DATA. INDEX specifies
+the image number.  The returned image will be of the same color space
+and data type of the image in the file, or will be a bitmap
+image. Attributes from the file will be stored at the image.
+
+For now, it works only for the ECW file format.
+
+Signals IM-ERROR on error."
+  (cffi:with-foreign-object
+      (error-ptr 'im-cffi::error-code)
+    (prog1
+        (im-cffi::%im-file-image-load-region
+         (%as-filename pathname-or-namestring)
+         index
+         bitmap-p
+         error-ptr
+         xmin xmax
+         ymin ymax
+         width height)
+      (im::maybe-error (cffi:mem-ref error-ptr 'im-cffi::error-code)))))
+
+(defun image-save (pathname-or-namestring format im-image)
+  "Saves the image to an already open file. 
+
+Open saves and closes the file. Attributes from the image will be
+store in the file.
+
+Signals IM-ERROR on error."
+  (im::maybe-error
+   (im-cffi::%im-file-image-save
+    (%as-filename pathname-or-namestring)
+    format
+    im-image)))

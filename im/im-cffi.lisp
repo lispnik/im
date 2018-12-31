@@ -418,24 +418,24 @@
 (cffi:defcfun (%im-file-load-image "imFileLoadImage") im-image
   (im-file im-file)
   (index :int)
-  (error (:pointer :int)))
+  (error-ptr :pointer))
 
-(cffi:defcfun (%im-file-load-image-frane "imFileLoadImageFrame") :void
+(cffi:defcfun (%im-file-load-image-frame "imFileLoadImageFrame") :void
   (im-file im-file)
   (index :int)
   (im-image im-image)
-  (error (:pointer :int)))
+  (error-ptr :pointer))
 
 (cffi:defcfun (%im-file-load-bitmap "imFileLoadBitmap") im-image
   (im-file im-file)
   (index :int)
-  (error (:pointer :int)))
+  (error-ptr :pointer))
 
 (cffi:defcfun (%im-file-load-image-region "imFileLoadImageRegion") im-image
   (im-file im-file)
   (index :int)
   (bitmap :boolean)
-  (error (:pointer :int))
+  (error-ptr :pointer)
   (xmin :int)
   (xmax :int)
   (ymin :int)
@@ -447,7 +447,7 @@
   (im-file im-file)
   (index :int)
   (im-image im-image)
-  (error (:pointer :int)))
+  (error-ptr :pointer))
 
 (cffi:defcfun (%im-file-save-image "imFileSaveImage") :int
   (im-file im-file)
@@ -456,18 +456,18 @@
 (cffi:defcfun (%im-file-image-load "imFileImageLoad") im-image
   (filename :string)
   (index :int)
-  (error (:pointer :int)))
+  (error-ptr :pointer))
 
 (cffi:defcfun (%im-file-image-load-bitmap "imFileImageLoadBitmap") im-image
   (filename :string)
   (index :int)
-  (error (:pointer :int)))
+  (error-ptr :pointer))
 
 (cffi:defcfun (%im-file-image-load-region "imFileImageLoadRegion") im-image
   (filename :string)
   (index :int)
   (bitmap :boolean)
-  (error (:pointer :int))
+  (error-ptr :pointer)
   (xmin :int)
   (xmax :int)
   (ymin :int)

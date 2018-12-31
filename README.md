@@ -5,8 +5,9 @@
 IM is a toolkit for image representation, storage, capture and
 processing. For more information, refer to:
 
-   http://webserver2.tecgraf.puc-rio.br/im/
-   im@tecgraf.puc-rio.br
+    http://webserver2.tecgraf.puc-rio.br/im/
+
+    im@tecgraf.puc-rio.br
    
 This project is unaffiliated with TecGraf.
 
