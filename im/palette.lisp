@@ -1,26 +1,31 @@
-(in-package #:im)
+(defpackage #:im-palette
+  (:use #:common-lisp
+	#:cffi
+	#:serapeum)
+  (:shadow #:count)
+  (:export #:data
+           #:count
+           #:sequence
+           #:new
+           #:new-from
+           #:release
+           #:duplicate
+           #:find-nearest
+           #:find-color
+           #:cyan
+           #:uniform-index
+           #:uniform-index-halftoned))
 
-(export '(palette-data
-          palette-count
-          palette-sequence
-          palette-new
-          palette-new-from
-          palette-release
-          palette-duplicate
-          palette-find-nearest
-          palette-find-color
-          palette-cyan
-          palette-uniform-index
-          palette-uniform-index-halftoned))
+(in-package #:im-palette)
 
 (defclass palette ()
   ((data :type cffi:foreign-pointer
          :initform (cffi:null-pointer)
-         :reader palette-data)
+         :reader data)
    (count :type integer
           :initarg :count
           :initform 256
-          :reader palette-count))
+          :reader count))
   (:documentation
    "Encapsulation of palette entries and number of palette entries."))
 
@@ -30,12 +35,12 @@
       (setf (slot-value instance 'data)
             (im-cffi::%im-palette-new (slot-value instance 'count)))
       (loop for i below count
-            do (setf (cffi:mem-aref (palette-data instance) :long i) 0)))))
+            do (setf (cffi:mem-aref (data instance) :long i) 0)))))
 
-(defun palette-sequence (palette)
+(defun sequence (palette)
   "Return the palette as a sequence of colors."
-  (loop with count = (palette-count palette)
-        with data = (palette-data palette)
+  (loop with count = (count palette)
+        with data = (data palette)
         with entries
           = (make-array count
                         :element-type '(signed-byte #.(* 8 (cffi:foreign-type-size :long))))
@@ -44,59 +49,59 @@
                  (cffi:mem-aref data :long i))
         finally (return entries)))
 
-(defun  palette-new (count)
+(defun  new (count)
   "Allocates memory for the palette data. This ensures allocation and
 release in the same module by the correct functions. NOTE: Unlike the
 C API, this function will initialize palette entries to 0."
   (make-instance 'palette :count count))
 
-(defun palette-new-from-sequence (sequence)
+(defun new-from-sequence (sequence)
   "Allocates a palette from a SEQUENCE of integers."
   (let* ((count (length sequence))
-         (palette (palette-new count)))
+         (palette (new count)))
     (loop for i below count
-          do (setf (cffi:mem-aref (palette-data palette) :long i)
+          do (setf (cffi:mem-aref (data palette) :long i)
                    (elt sequence i))
           finally (return palette))))
 
-(defun palette-release (palette)
+(defun release (palette)
   "Releases memory for the palette data. This ensures allocation and
 release in the same module by the correct functions."
   (setf (slot-value palette 'data) (cffi:null-pointer))
-  (im-cffi::%im-palette-release (palette-data palette)))
+  (im-cffi::%im-palette-release (data palette)))
 
-(defun palette-duplicate (palette)
-  "Duplicate a palette data using PALETTE-NEW."
-  (let* ((count (palette-count palette))
+(defun duplicate (palette)
+  "Duplicate a palette data using NEW."
+  (let* ((count (count palette))
          (new-palette (make-instance 'palette :count count)))
     (loop for i below count
-          do (setf (cffi:mem-aref (palette-data new-palette) :long i)
-                   (cffi:mem-aref (palette-data palette) :long i)))))
+          do (setf (cffi:mem-aref (data new-palette) :long i)
+                   (cffi:mem-aref (data palette) :long i)))))
 
-(defun palette-find-nearest (palette color)
+(defun find-nearest (palette color)
   "Searches for the nearest color on the table and returns the color
 index if successful. It looks in all palette entries and finds the
 minimum euclidian square distance. If the color matches the given
 color it returns immediately."
   (im-cffi::%im-palette-find-nearest 
-   (palette-data palette)
-   (palette-count palette)
+   (data palette)
+   (count palette)
    color))
 
-(defun palette-find-color (palette color tolerance)
+(defun find-color (palette color tolerance)
   "Searches for COLOR in the table and returns the color index if
 successful. If TOLERANCE is 0 search for the exact match in the
 palette else search for the first color that fits in the tolerance
 range."
   (im-cffi::%im-palette-find-color
-   (palette-data palette)
-   (palette-count palette)
+   (data palette)
+   (count palette)
    color
    tolerance))
 
-(defmacro define-palette (name documentation)
+(defmacro %define-palette (name documentation)
   (let* ((cffi-package (find-package "IM-CFFI"))
-         (cffi-function (intern (format nil "%IM-~A" (symbol-name name))
+         (cffi-function (intern (format nil "%IM-PALETTE-~A" (symbol-name name))
                                 cffi-package)))
     `(progn
        (defun ,name ()
@@ -106,65 +111,65 @@ range."
            palette))
        (export ',name))))
 
-(define-palette palette-gray
+(%define-palette gray
   "Creates a palette of gray scale values.
 The colors are arranged from black to white.")
 
-(define-palette palette-red
+(%define-palette red
   "Creates a palette of a gradient of red colors. 
 The colors are arranged from black to pure red.")
 
-(define-palette palette-green
+(%define-palette green
   "Creates a palette of a gradient of green colors. 
 The colors are arranged from black to pure red.")
 
-(define-palette palette-blue
+(%define-palette blue
   "Creates a palette of a gradient of red colors. 
 The colors are arranged from black to pure red.")
 
-(define-palette palette-magenta
+(%define-palette magenta
   "Creates a palette of a gradient of magenta colors. 
 The colors are arranged from black to pure magenta.")
 
-(define-palette palette-cian
+(%define-palette cian
   "Creates a palette of a gradient of cian colors. 
 The colors are arranged from black to pure cian.")
 
-(defalias palette-cyan #'palette-cian)
+(setf (symbol-function 'cyan) #'cian)
 
-(define-palette palette-rainbow
+(%define-palette rainbow
   "Creates a palette of rainbow colors. 
 The colors are arranged in the light wave length spectrum
 order (starting from purple).")
 
-(define-palette palette-hues
+(%define-palette hues
   "Creates a palette of hues with maximum saturation.")
 
-(define-palette palette-blue-ice
+(%define-palette blue-ice
   "Creates a palette of a gradient of blue colors.
 The colors are arranged from pure blue to white.")
 
-(define-palette palette-hot-iron
+(%define-palette hot-iron
   "Creates a palette of a gradient from black to white passing through
 red and orange.")
 
-(define-palette palette-high-contrast
+(%define-palette high-contrast
   "Creates a palette with high contrast colors.")
 
-(define-palette palette-linear
+(%define-palette linear
   "Creates a palette of a sequence of colors from black to white with
 32 linear intensity values combined with 8 hue variations.")
 
-(define-palette palette-uniform
+(%define-palette uniform
   "Creates a palette of an uniform sub-division of colors from black
 to white. This is a 2^(2.6) bits per pixel palette.")
 
-(defun palette-uniform-index (color)
+(defun uniform-index (color)
   "Returns the index of the correspondent RGB color of an uniform
 palette."
   (im-cffi::%im-palette-uniform-index color))
 
-(defun palette-uniform-index-halftoned (color x y)
+(defun uniform-index-halftoned (color x y)
   "Returns the index of the correspondent RGB color of an uniform
 palette. Uses an 8x8 ordered dither to lookup the index in a halftone
 matrix. The spatial position used by the halftone method."

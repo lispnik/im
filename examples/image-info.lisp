@@ -17,7 +17,7 @@
         (width height
          color-mode-config color-space
          data-type)
-      (im:file-read-image-info file index)
+      (im-file:read-image-info file index)
     `(:width ,width
       :height ,height
       :color-mode (:color-space ,color-space
@@ -27,18 +27,18 @@
                    width height
                    color-mode-config color-space
                    data-type)
-      :attributes ,(loop with attributes = (im:file-attributes file)
+      :attributes ,(loop with attributes = (im-file:attributes file)
                          for attribute in attributes
                          collect (cons attribute
                                        (multiple-value-list
-                                        (im:file-attribute file attribute)))))))
+                                        (im-file:attribute file attribute)))))))
 
 (defun image-info (pathname)
   "Retuns information about an image as an ALIST."
-  (im:with-open-file (file (im:file-open (if (pathnamep pathname) (namestring pathname) pathname)))
+  (im-file:with-open-file (file (im-file:open (if (pathnamep pathname) (namestring pathname) pathname)))
     (multiple-value-bind
           (format compression count)
-        (im:file-info file)
+        (im-file:info file)
       `(:pathname ,pathname
         :format ,format
         :compression ,compression

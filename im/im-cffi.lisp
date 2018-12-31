@@ -235,7 +235,22 @@
 
 ;;; im_image.h
 
-(cffi:defctype im-image :pointer)
+(cffi:defcstruct im-image-struct
+  (width :int)
+  (height :int)
+  (color-space color-space)
+  (data-type data-type)
+  (has-alpha-p :boolean)
+  (depth :int)
+  (plane-size :int)
+  (size :int)
+  (count :int)
+  (data (:pointer :pointer))
+  (palette (:pointer :long))
+  (palette-count :int)
+  (attribute-table :pointer))
+
+(cffi:defctype im-image (:pointer (:struct im-image-struct)))
 
 (cffi:defcfun (%im-image-create "imImageCreate") im-image
   (width :int)
@@ -256,8 +271,8 @@
   (im-image im-image)
   (width :int)
   (height :int)
-  (color-space color-space)
-  (data-type data-type))
+  (color-space :int)
+  (data-type :int))
 
 (cffi:defcfun (%im-image-destroy "imImageDestroy") :void
   (im-image im-image))

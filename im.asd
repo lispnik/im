@@ -10,12 +10,12 @@
                (:file "version")
                (:file "error")
                (:file "util")
-	       (:file "im")
+	       (:file "file")
                (:file "format")
                (:file "palette")
-               (:file "convert"))
+               (:file "convert")
+               (:file "image"))
   :depends-on (#:im-cffi
                #:cffi
                #:alexandria
-               #:serapeum
-               #:log4cl))
+               #:serapeum))
