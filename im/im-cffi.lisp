@@ -591,12 +591,6 @@
   :complex-to-magnitude
   :complex-to-phase)
 
-(defconstant +gamma-linear+ 0.0)
-(defconstant +gamma-log-lite+ -10.0)
-(defconstant +gamma-log-heavy+ -1000.0)
-(defconstant +gamma-exp-lite+ 2.0)
-(defconstant +gamma-exp-heavy+ 7.0)
-
 (cffi:defcenum cast-mode
   :cast-mode-minimax
   :cast-mode-fixed
