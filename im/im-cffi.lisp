@@ -585,21 +585,57 @@
 
 ;;; im_convert.h
 
-;;; imConvertDataType
-;;; imConvertColorSpace
-;;; imConvertToBitmap
-;;; imImageGetOpenGLData
-;;; imImageCreateFromOpenGLData
+(cffi:defcenum complex-to-real
+  :complex-to-real
+  :complex-to-imaginary
+  :complex-to-magnitude
+  :complex-to-phase)
+
+(defconstant +gamma-linear+ 0.0)
+(defconstant +gamma-log-lite+ -10.0)
+(defconstant +gamma-log-heavy+ -1000.0)
+(defconstant +gamma-exp-lite+ 2.0)
+(defconstant +gamma-exp-heavy+ 7.0)
+
+(cffi:defcenum cast-mode
+  :cast-mode-minimax
+  :cast-mode-fixed
+  :cast-mode-direct
+  :cast-mode-user)
+
+(cffi:defcfun (%im-convert-data-type "imConvertDataType") error-code
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (complex-to-real complex-to-real)
+  (gamma :float)
+  (absolute-p :boolean)
+  (cast-mode cast-mode))
+
+(cffi:defcfun (%im-convert-color-space "imConvertColorSpace") error-code
+  (src-im-image im-image)
+  (dst-im-image im-image))
+
+(cffi:defcfun (%im-convert-to-bitmap "imConvertToBitmap") error-code
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (complex-to-real complex-to-real)
+  (gamma :float)
+  (absolute-p :boolean)
+  (cast-mode cast-mode))
+
+(cffi:defcfun (%im-convert-color-space "imConvertColorSpace") error-code
+  (src-im-image im-image)
+  (dst-im-image im-image))
 
 (cffi:defcfun (%im-convert-packing "imConvertPacking") :void
-  (src-data :pointer)
-  (dst-data :pointer)
+  (src-data im-image)
+  (dst-data im-image)
   (width :int)
   (height :int)
   (src-depth :int)
   (dst-depth :int)
   (data-type data-type)
-  (src-is-packed :boolean))
+  (src-is-packed-p :boolean))
 
 (cffi:defcfun (%im-convert-map-to-rgb "imConvertMapToRGB") :void
   (data :pointer)
@@ -608,5 +644,3 @@
   (packed :int)
   (palette palette)
   (palette-count :int))
-
-;;; imConvertRGB2Map
