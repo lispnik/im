@@ -638,3 +638,18 @@
   (packed :int)
   (palette palette)
   (palette-count :int))
+
+;;; im_util.h
+
+(cffi:defcfun (%im-compress-data-z "imCompressDataZ") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int)
+  (quality :int))
+
+(cffi:defcfun (%im-compress-data-un-z "imCompressDataUnZ") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
