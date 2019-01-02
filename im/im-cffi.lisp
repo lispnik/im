@@ -653,3 +653,27 @@
   (src-size :int)
   (dst-data-ptr :pointer)
   (dst-size :int))
+
+(cffi:defcfun (%im-compress-data-lzf "imCompressDataLZF") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
+
+(cffi:defcfun (%im-compress-data-un-lzf "imCompressDataUnLZF") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
+
+(cffi:defcfun (%im-compress-data-un-lzo "imCompressDataLZO") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
+
+(cffi:defcfun (%im-compress-data-un-lzo "imCompressDataUnLZO") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
