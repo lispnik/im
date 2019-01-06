@@ -192,7 +192,7 @@
   (format :string)
   (extra :pointer))                     ;NOTE documented as 50 chars max
 
-(cffi:defcfun (%im-format-compressions "imFormatCompressions") :int
+(cffi:defcfun (%im-format-compressions "imFormatCompressions") error-code
   (format :string)
   (compressions-ptr :pointer)		;NOTE documented as 50 compressions max (char* comp[50])
   (compressions-count :pointer)

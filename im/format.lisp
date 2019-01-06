@@ -97,12 +97,13 @@ COLOR-MODE-CONFIG-LIST, COLOR-SPACE and DATA-TYPE. e.g.
     (cffi:with-foreign-objects
         ((compressions-ptr :pointer 50)
          (compressions-count-ptr :int))
-      (im-cffi::%im-format-compressions
-       format
-       compressions-ptr
-       compressions-count-ptr
-       color-mode
-       data-type)
+      (maybe-error
+       (im-cffi::%im-format-compressions
+	format
+	compressions-ptr
+	compressions-count-ptr
+	color-mode
+	data-type))
       (loop with count = (cffi:mem-ref compressions-count-ptr :int)
             for i below count
             collect (cffi:foreign-string-to-lisp
