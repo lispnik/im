@@ -6,5 +6,5 @@
 
 (in-package #:im-avi)
 
-(defalias format-register-avi #'im-jp2-cffi::%im-format-register-avi)
+(defalias format-register-avi #'im-avi-cffi::%im-format-register-avi)
 
