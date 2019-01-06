@@ -19,8 +19,6 @@
 (defun image-copy
     (input-pathname output-pathname &optional output-format output-compression)
   "Copy and optionally convert one file to another."
-  #+windows (im-wmv:format-register-wmv)
-  #+windows (im-avi:format-register-avi)
   (im-file:with-open-file (input-file (im-file:open input-pathname))
       (multiple-value-bind
             (input-format input-compression input-count)
