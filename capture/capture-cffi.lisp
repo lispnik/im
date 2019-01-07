@@ -31,7 +31,7 @@
 (cffi:defcfun (%im-video-capture-release-devices "imVideoCaptureReleaseDevices") :void)
 (cffi:defcfun (%im-video-capture-create "imVideoCaptureCreate") im-video-capture)
 
-(cffi:defcfun (%im-video-capture-create "imVideoCaptureDestroy") :void
+(cffi:defcfun (%im-video-capture-destroy "imVideoCaptureDestroy") :void
   (vc im-video-capture))
 
 (cffi:defcfun (%im-video-capture-connect "imVideoCaptureConnect") :int
