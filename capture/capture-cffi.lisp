@@ -53,7 +53,7 @@
   (vc im-video-capture)
   (dialog :int))
 
-(cffi:defcfun (%im-video-capture-set-in-out "imVideoCaptureSetInOut") :int
+(cffi:defcfun (%im-video-capture-set-in-out "imVideoCaptureSetInOut") :boolean
   (vc im-video-capture)
   (input :int)
   (output :int)
@@ -62,7 +62,7 @@
 (cffi:defcfun (%im-video-capture-format-count "imVideoCaptureFormatCount") :int
   (vc im-video-capture))
 
-(cffi:defcfun (%im-video-capture-get-format "imVideoCaptureGetFormat") :int
+(cffi:defcfun (%im-video-capture-get-format "imVideoCaptureGetFormat") :boolean
   (vc im-video-capture)
   (format :int)
   (width (:pointer :int))
