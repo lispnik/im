@@ -5,6 +5,8 @@
   (:export #:invalid-device-error
 	   #:no-device-error
 	   #:connection-error
+	   #:device-configuration-error
+	   #:capture-error
 	   #:device-count
 	   #:device-description
 	   #:device-extended-description
