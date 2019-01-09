@@ -180,3 +180,85 @@ DEVICE-CONFIGURATION-ERROR on error."
     (if (= result -1)
 	(error 'device-configuration-error)
 	result)))
+
+(defun image-size (context)
+  "Returns the current image size of the connected device as WIDTH and
+HEIGHT values. Signals DEVICE-CONFIGURATION-ERROR on error."
+  (cffi:with-foreign-objects
+      ((width-ptr :int)
+       (height-ptr :int))
+    (im-capture-cffi::%im-video-capture-get-image-size context width-ptr height-ptr)
+    (let ((result (cffi:mem-ref width-ptr :int)))
+      (if (zerop result)
+	  (error 'device-configuration-error)
+	  (values (cffi:mem-ref width-ptr :int)
+		  (cffi:mem-ref height-ptr :int))))))
+
+;; TODO int IM_DECL imVideoCaptureSetImageSize(imVideoCapture* vc, int width, int height);
+
+(defun %verify-capture-frame-data-vector (context data color-mode-config color-space)
+  (assert (member color-space '(:color-space-gray :color-space-rgb)))
+  (assert (equal (array-element-type data) '(unsigned-byte 8)))
+  (multiple-value-bind (width height)
+      (image-size context)
+    (let ((expected-data-size
+	    (im:image-data-size width height
+				color-mode-config color-space
+				:data-type-byte)))
+      (assert (>= (length data) expected-data-size)))))
+
+(defun capture-frame (context data color-mode-config color-space &optional timeout)
+  (%verify-capture-frame-data-vector context data color-mode-config color-space)
+  (im-capture-cffi::%im-video-capture-frame
+   context
+   (static-vectors:static-vector-pointer data)
+   (im::%encode-color-mode color-mode-config color-space)
+   (if timeout timeout -1)))
+
+(defun capture-one-frame (context data color-mode-config color-space)
+  (%verify-capture-frame-data-vector context data color-mode-config color-space)
+  (im-capture-cffi::%im-video-capture-one-frame
+   context
+   (static-vectors:static-vector-pointer data)
+   (im::%encode-color-mode color-mode-config color-space)))
+
+#+nil
+(progn
+  (release-devices)
+  (let* ((device 0)
+	 (context (create)))
+    (unwind-protect
+	 (progn
+	   (connect context device)
+	   ;; (print (connected-device context))
+	   ;; (print (dialog-count context))
+	   ;; (print (format-count context))
+	   ;; (loop with dialog-count = (dialog-count context)
+	   ;; 	 for i below dialog-count
+	   ;; 	 do (print (dialog-description context i)))
+	   ;; (loop with format-count = (format-count context)
+	   ;; 	 for i below format-count
+	   ;; 	 do (print (multiple-value-list (format context i))))
+
+	   (multiple-value-bind
+		 (width height)
+	       (format context (current-format context))
+	   (let* ((color-mode-config '(:color-mode-config-packed))
+		  (color-space :color-space-rgb)
+		  (data-type :data-type-byte)
+		  (data-size (im:image-data-size width height
+						 color-mode-config
+						 color-space
+						 data-type))
+		  (data (static-vectors:make-static-vector
+			 data-size
+			 :element-type '(unsigned-byte 8)
+			 :initial-element 0)))
+	     (unwind-protect
+		  (progn
+		    (capture-one-frame context data color-mode-config color-space)
+		    (break))
+	       (static-vectors:free-static-vector data)))))
+      (progn
+	(disconnect context)
+	(destroy context)))))
