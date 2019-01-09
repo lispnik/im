@@ -279,37 +279,4 @@ error."
   "Returns T if the context is live (capturing), NIL if not live."
   (not (zerop (im-capture-cffi::%im-video-capture-live context -1))))
 
-#+nil
-(defun cheeze ()
- (let ((context (create)))
-   (unwind-protect
-	(unwind-protect
-	     (progn
-	       ;; Use first device (probably webcam)
-	       (connect context 0)
-	       (live context t)
-	       (cl:format t "Say CHEESE!~%")
-	       (finish-output)
-	       (read-line)
-	       (multiple-value-bind
-		     (width height)
-		   (image-size context)
-		 (cl:format t "~Ax~A~%" width height)
-		 (let* ((color-mode-config '(:color-mode-config-packed))
-			(color-space :color-space-gray)
-			(data-type :data-type-byte)
-			(data-size (im:image-data-size width height color-mode-config color-space data-type))
-			(data (static-vectors:make-static-vector data-size :element-type '(unsigned-byte 8) :initial-element 0)))
-		   (unwind-protect
-			(uiop:with-temporary-file
-			    (:stream stream
-			     :keep t
-			     :direction :output
-			     :element-type '(unsigned-byte 8) :type "dat")
-			  (capture-frame context data color-mode-config color-space)
-			  (write-sequence data stream))
-		     (static-vectors:free-static-vector data))))
-	       (live context nil))
-	  (disconnect context))
-     (destroy context))))
 
