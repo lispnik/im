@@ -16,7 +16,19 @@
 	   #:destroy
 	   #:connect
 	   #:connected-device
-	   #:disconnect)
+	   #:disconnect
+	   #:dialog-count
+	   #:show-dialog
+	   #:dialog-description
+	   #:set-in-out
+	   #:format-count
+	   #:format
+	   #:current-format
+	   #:image-size
+	   #:capture-frame
+	   #:capture-one-frame
+	   #:live
+	   #:live-p)
   (:shadow #:format))
 
 (in-package #:im-capture)
@@ -25,6 +37,7 @@
 (define-condition no-device-error () ())
 (define-condition connection-error () ())
 (define-condition device-configuration-error () ())
+(define-condition capture-error () ())
 
 (defalias device-count #'im-capture-cffi::%im-video-capture-device-count
   "Returns the number of available devices.")
@@ -36,50 +49,50 @@ device is invalid."
       (error 'invalid-device-error)))
 
 (defun device-extended-description (device)
-  "Returns the extended device description. Signals
-INVALID-DEVICE-ERROR if the device is invalid."
+  "returns the extended device description. signals
+invalid-device-error if the device is invalid."
   (or (im-capture-cffi::%im-video-capture-device-ex-desc device)
       (error 'invalid-device-error)))
 
 (defun device-path (device)
-  "Returns the device path configuration. This is a unique
-string. Signals INVALID-DEVICE-ERROR if the device is invalid."
+  "returns the device path configuration. this is a unique
+string. signals invalid-device-error if the device is invalid."
   (or (im-capture-cffi::%im-video-capture-device-path device)
       (error 'invalid-device-error)))
 
 (defun device-vendor-info (device)
-  "Returns the vendor information. Signals INVALID-DEVICE-ERROR if the
+  "returns the vendor information. signals invalid-device-error if the
 device is invalid."
   (or (im-capture-cffi::%im-video-capture-device-vendor-info device)
       (error 'invalid-device-error)))
 
 (defalias reload-devices #'im-capture-cffi::%im-video-capture-reload-devices
-  "Reload the device list. The devices can be dynamically removed or
-added to the system. Returns the number of available devices.")
+  "reload the device list. the devices can be dynamically removed or
+added to the system. returns the number of available devices.")
 
 (defalias release-devices #'im-capture-cffi::%im-video-capture-release-devices
-  "Release the device list. Useful is you need to track leak errors in
+  "release the device list. useful is you need to track leak errors in
 your application.")
 
 (defun create ()
-  "Creates a new video capture context. 
+  "creates a new video capture context. 
 
-Signals NO-DEVICE-ERROR if no capture device is available or, if on
-Windows the DirectX version is older than 8."
+signals no-device-error if no capture device is available or, if on
+windows the directx version is older than 8."
   (let ((context (im-capture-cffi::%im-video-capture-create)))
     (if (cffi:null-pointer-p context)
 	(error 'no-device-error)
 	context)))
 
 (defun destroy (context)
-  "Destroys a video capture context returned by CREATE."
+  "destroys a video capture context returned by create."
   (im-capture-cffi::%im-video-capture-destroy context))
 
 (defun connect (context device)
-  "Connects to a capture device. 
+  "connects to a capture device. 
 
-More than one video capture context can be created but they must be
-connected to different devices. If the context is connected it will
+more than one video capture context can be created but they must be
+connected to different devices. if the context is connected it will
 disconnect first."
   (check-type device (integer 0 *))
   (let ((result (im-capture-cffi::%im-video-capture-connect context device)))
@@ -87,42 +100,42 @@ disconnect first."
 	(error 'connection-error))))
 
 (defun connected-device (context)
-  "Returns the device number connected to an video capture context or
-NIL if it is not connected."
+  "returns the device number connected to an video capture context or
+nil if it is not connected."
   (let ((connected-device (im-capture-cffi::%im-video-capture-connect context -1)))
     (if (= connected-device -1)
 	nil
 	connected-device)))
 
 (defalias disconnect #'im-capture-cffi::%im-video-capture-disconnect
-  "Disconnect from a capture device context.")
+  "disconnect from a capture device context.")
 
 (defalias dialog-count #'im-capture-cffi::%im-video-capture-dialog-count
-  "Returns the number of available configuration dialogs.")
+  "returns the number of available configuration dialogs.")
 
 (defun show-dialog (context dialog &optional (parent (cffi:null-pointer)))
-  "Displays a configuration modal dialog of the connected device
+  "displays a configuration modal dialog of the connected device
 
-In Windows, the capturing will be stopped in some cases. In Windows,
-PARENT is a HWND of a parent window. DIALOG can be from 0 to
-DIALOG-COUNT.
+in windows, the capturing will be stopped in some cases. in windows,
+parent is a hwnd of a parent window. dialog can be from 0 to
+dialog-count.
 
-Signals DEVICE-CONFIGURATION-ERROR on error."
+signals device-configuration-error on error."
   (im-capture-cffi::%im-video-capture-show-dialog context dialog parent))
 
 (defalias dialog-description #'im-capture-cffi::%im-video-capture-dialog-desc
-  "Returns the description of a configuration dialog. DIALOG can be
-from 0 to DIALOG-COUNT.")
+  "returns the description of a configuration dialog. dialog can be
+from 0 to dialog-count.")
 
 (defun set-in-out (context input output &optional (cross-index 1))
-  "Allows to control the input and output of devices that have
+  "allows to control the input and output of devices that have
 multiple input and outputs.
  
-The cross index controls in which stage the input/output will be
-set. Usually use 1, but some capture boards has a second stage. In
-Direct X it controls the cross-bars. 
+the cross index controls in which stage the input/output will be
+set. usually use 1, but some capture boards has a second stage. in
+direct x it controls the cross-bars. 
 
-Signals DEVICE-CONFIGURATION-ERROR on error."
+signals device-configuration-error on error."
   (when (im-capture-cffi::%im-video-capture-set-in-out
 	 context
 	 input
@@ -131,16 +144,16 @@ Signals DEVICE-CONFIGURATION-ERROR on error."
     (error 'device-configuration-error)))
 
 (defun format-count (context)
-  "Returns the number of available video formats. Signals
-DEVICE-CONFIGURATION-ERROR on error."
+  "returns the number of available video formats. signals
+device-configuration-error on error."
   (let ((count (im-capture-cffi::%im-video-capture-format-count context)))
     (if (zerop count)
 	(error 'device-configuration-error)
 	count)))
 
 (defun format (context format)
-  "Returns information about the video format as values WIDTH HEIGHT
-and DESCRIPTION. Signals DEVICE-CONFIGURATION-ERROR on error."
+  "returns information about the video format as values width height
+and description. signals device-configuration-error on error."
   (cffi:with-foreign-objects
       ((width-ptr :int)
        (height-ptr :int)
@@ -160,30 +173,30 @@ and DESCRIPTION. Signals DEVICE-CONFIGURATION-ERROR on error."
 	  (error 'device-configuration-error)))))
 
 (defun (setf format) (format context)
-  "Changes the video format of the connected device. 
+  "changes the video format of the connected device. 
 
-Should NOT work for DV devices. Use (SETF IMAGE-SIZE) only. When the
+should not work for dv devices. use (setf image-size) only. when the
 format is changed in the dialog, for some formats the returned format
-is the preferred format, not the current format. This will not affect
+is the preferred format, not the current format. this will not affect
 the color-mode-configuration or color-space of the captured image.
 
-Signals DEVICE-CONFIGURATION-ERROR on error."
+signals device-configuration-error on error."
   (check-type format (integer 0 *))
   (if (zerop (im-capture-cffi::%im-video-capture-set-format context format))
       (error 'device-configuration-error)
       format))
 
 (defun current-format (context)
-  "Returns the current format index. Signals
-DEVICE-CONFIGURATION-ERROR on error."
+  "returns the current format index. signals
+device-configuration-error on error."
   (let ((result (im-capture-cffi::%im-video-capture-set-format context -1)))
     (if (= result -1)
 	(error 'device-configuration-error)
 	result)))
 
 (defun image-size (context)
-  "Returns the current image size of the connected device as WIDTH and
-HEIGHT values. Signals DEVICE-CONFIGURATION-ERROR on error."
+  "returns the current image size of the connected device as width and
+height values. signals device-configuration-error on error."
   (cffi:with-foreign-objects
       ((width-ptr :int)
        (height-ptr :int))
@@ -194,7 +207,7 @@ HEIGHT values. Signals DEVICE-CONFIGURATION-ERROR on error."
 	  (values (cffi:mem-ref width-ptr :int)
 		  (cffi:mem-ref height-ptr :int))))))
 
-;; TODO int IM_DECL imVideoCaptureSetImageSize(imVideoCapture* vc, int width, int height);
+;; todo int im_decl imvideocapturesetimagesize(imvideocapture* vc, int width, int height);
 
 (defun %verify-capture-frame-data-vector (context data color-mode-config color-space)
   (assert (member color-space '(:color-space-gray :color-space-rgb)))
@@ -222,43 +235,42 @@ HEIGHT values. Signals DEVICE-CONFIGURATION-ERROR on error."
    (static-vectors:static-vector-pointer data)
    (im::%encode-color-mode color-mode-config color-space)))
 
-#+nil
-(progn
-  (release-devices)
-  (let* ((device 0)
-	 (context (create)))
-    (unwind-protect
-	 (progn
-	   (connect context device)
-	   ;; (print (connected-device context))
-	   ;; (print (dialog-count context))
-	   ;; (print (format-count context))
-	   ;; (loop with dialog-count = (dialog-count context)
-	   ;; 	 for i below dialog-count
-	   ;; 	 do (print (dialog-description context i)))
-	   ;; (loop with format-count = (format-count context)
-	   ;; 	 for i below format-count
-	   ;; 	 do (print (multiple-value-list (format context i))))
+(defun live (context live-p)
+  (let ((result (im-capture-cffi::%im-video-capture-live context (if live-p 1 0))))
+    (if (zerop result)
+	(error 'capture-error))))
 
-	   (multiple-value-bind
-		 (width height)
-	       (format context (current-format context))
-	   (let* ((color-mode-config '(:color-mode-config-packed))
-		  (color-space :color-space-rgb)
-		  (data-type :data-type-byte)
-		  (data-size (im:image-data-size width height
-						 color-mode-config
-						 color-space
-						 data-type))
-		  (data (static-vectors:make-static-vector
-			 data-size
-			 :element-type '(unsigned-byte 8)
-			 :initial-element 0)))
-	     (unwind-protect
-		  (progn
-		    (capture-one-frame context data color-mode-config color-space)
-		    (break))
-	       (static-vectors:free-static-vector data)))))
-      (progn
-	(disconnect context)
-	(destroy context)))))
+(defun live-p (context)
+  "Returns T if the context is live (capturing), NIL if not live."
+  (not (zerop (im-capture-cffi::%im-video-capture-live context -1))))
+
+#+nil
+(let ((context (create)))
+  (flet ((checksum (data)
+	   (loop with count = (length data)
+		 for i below count
+		 sum (aref data i))))
+    (unwind-protect
+	 (unwind-protect
+	      (progn
+		(connect context 0)
+		(live context t)
+		(sleep 4)
+		(multiple-value-bind
+		      (width height)
+		    (image-size context)
+		  (let* ((color-mode-config '(:color-mode-config-packed))
+			 (color-space :color-space-rgb)
+			 (data-type :data-type-byte)
+			 (data-size (im:image-data-size width height color-mode-config color-space data-type))
+			 (data (static-vectors:make-static-vector data-size :element-type '(unsigned-byte 8) :initial-element 0)))
+		    (unwind-protect
+			 (progn
+			   (cl:format t "~&before ~A" (checksum data))
+			   (capture-frame context data color-mode-config color-space)
+			   (cl:format t "~&after ~A" (checksum data))
+			   (finish-output))
+		      (static-vectors:free-static-vector data))))
+		(live context nil))
+	   (disconnect context))
+      (destroy context))))
