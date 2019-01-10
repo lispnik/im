@@ -32,7 +32,9 @@
            #:make-binary
            #:make-gray
            #:width
-           #:height))
+           #:height
+	   #:size
+	   #:data))
 
 (in-package #:im-image)
 
@@ -186,4 +188,16 @@ in-place. Color space is not changed. Data type must be IM_BYTE.")
 
 (defun height (im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::width))
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::height))
+
+(defun size (im-image)
+  (cffi:foreign-slot-value
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::size))
+
+(defun data (im-image plane)
+  ;; FIXME do better here with bounds for plane
+  (cffi:mem-aref
+   (cffi:foreign-slot-value
+    im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data)
+   :pointer
+   plane))
