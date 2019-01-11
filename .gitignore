@@ -1,4 +1,5 @@
 *~
 *.fasl
 *.lx64fsl
+*.wx64fsl
 README.html
