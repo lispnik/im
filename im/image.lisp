@@ -34,7 +34,10 @@
            #:width
            #:height
 	   #:size
-	   #:data))
+	   #:data
+	   #:data-type
+	   #:color-space
+	   #:depth))
 
 (in-package #:im-image)
 
@@ -201,3 +204,15 @@ in-place. Color space is not changed. Data type must be IM_BYTE.")
     im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data)
    :pointer
    plane))
+
+(defun data-type (im-image)
+  (cffi:foreign-slot-value
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data-type))
+
+(defun color-space (im-image)
+  (cffi:foreign-slot-value
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::color-space))
+
+(defun depth (im-image)
+  (cffi:foreign-slot-value
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::depth))

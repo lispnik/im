@@ -1,6 +1,7 @@
 (defpackage #:im-cffi
   (:use #:common-lisp)
-  (:export #:im-image))
+  (:export #:im-image
+	   #:data-type))
 
 (in-package #:im-cffi)
 
