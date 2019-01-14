@@ -24,7 +24,7 @@ all four, however only the following are mostly implemented:
 
 - [x] Representation
 - [x] Storage¹
-- [ ] Capture
+- [x] Capture
 - [ ] Processing
 
 ¹ except memory file support
@@ -76,6 +76,25 @@ the C API to Lisp:
 ## Examples
 
 Load the examples system with `(ql:quickload '("im" "im-examples"))`.
+
+### Device Capture
+
+[cheese.lisp](https://github.com/lispnik/im/blob/master/examples/cheese.lisp)
+
+Write a raw, 8-bit, grayscale image using the first image capture
+device (which is probably a webcam).
+
+```lisp
+CL-USER> (im-examples.cheese:cheese)
+Say CHEESE! (and press enter)
+
+C:/Users/Example/AppData/Local/Temp/tmpXLS8LL7R-tmp.dat
+(COLOR-MODE-CONFIG-PACKED)
+COLOR-SPACE-GRAY
+DATA-TYPE-BYTE
+640x480
+NIL
+```
 
 ### Image Copy
 
