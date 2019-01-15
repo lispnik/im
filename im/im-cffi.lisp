@@ -1,7 +1,10 @@
 (defpackage #:im-cffi
   (:use #:common-lisp)
-  (:export #:im-image
-	   #:data-type))
+  (:import-from #:trivial-wrapper #:define-wrapper)
+  (:export #:im-file
+	   #:im-image
+	   #:make-im-file
+	   #:make-im-image))
 
 (in-package #:im-cffi)
 
@@ -59,7 +62,8 @@
   :error-code-mem
   :error-code-counter)
 
-(cffi:defctype im-file :pointer)
+(define-wrapper im-file)
+(define-wrapper im-image)
 
 (cffi:defcfun (%im-file-open "imFileOpen") im-file
   (filename :string)
