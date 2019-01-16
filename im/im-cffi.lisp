@@ -255,8 +255,6 @@
   (palette-count :int)
   (attribute-table :pointer))
 
-(cffi:defctype im-image (:pointer (:struct im-image-struct)))
-
 (cffi:defcfun (%im-image-create "imImageCreate") im-image
   (width :int)
   (height :int)

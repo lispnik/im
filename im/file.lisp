@@ -33,7 +33,8 @@
            #:image-load
            #:image-load-bitmap
            #:image-load-region
-           #:image-save))
+           #:image-save)
+  (:import-from #:im-cffi #:im-file #:im-image))
 
 (in-package #:im-file)
 
@@ -73,9 +74,11 @@ create the file, no data is actually written."
 
 (defun close (im-file)
   "Closes the file."
+  (check-type im-file im-file)
   (im-cffi::%im-file-close im-file))
 
 (defun call-with-open-file (func im-file)
+  (check-type im-file im-file)
   (unwind-protect
        (funcall func im-file)
     (close im-file)))
@@ -96,6 +99,7 @@ returns NIL because they do not use IM-BIN-FILE (such as AVI and WMV).
 INDEX = 1 returns an internal structure used by the format, usually is
 a handle to a third party library structure. This is file format
 dependent."
+  (check-type im-file im-file)
   (let ((handle (im-cffi::%im-file-handle im-file index)))
     (when (cffi:null-pointer-p handle)
       handle)))
@@ -107,6 +111,7 @@ number of frames in a video/animation or the depth of a volume data.
 
 These values are also available as IM-FILE attributes: \"FileFormat\",
 \"FileCompression\" (strings) and \"FileImageCount\" (integer)."
+  (check-type im-file im-file)
   (cffi:with-foreign-objects
       ((format-ptr :char 10)            ;blind strcpy :-( probably less than 10 though
        (compression-ptr :char 10)       ;from im_file.h
@@ -118,6 +123,7 @@ These values are also available as IM-FILE attributes: \"FileFormat\",
 
 (defun compression (im-file)
   "Returns the compression method."
+  (check-type im-file im-file)
   (nth-value 1 (info im-file)))
 
 (defun (setf compression) (compression im-file)
@@ -128,6 +134,7 @@ writing.  Use NIL to set the default compression. You can use the INFO
 to retrieve the actual compression but only after
 WRITE-IMAGE-INFO. Only a few formats allow you to change the
 compression between frames."
+  (check-type im-file im-file)
   (if compression
       (cffi:with-foreign-string
           (compression-ptr compression)
@@ -148,6 +155,7 @@ compression between frames."
 
 (defun remove-attribute (im-file attribute)
   "Removes an extended attribute."
+  (check-type im-file im-file)
   (im-cffi::%im-file-set-attribute
    im-file attribute
    :data-type-int                       ;data-type and count are ignored
@@ -156,6 +164,7 @@ compression between frames."
 
 (defun (setf attribute) (values im-file attribute data-type)
   "Changes an extended attribute."
+  (check-type im-file im-file)
   (let ((count (length values))
         (cffi-type (%cffi-type data-type)))
     (if (member data-type '(:data-type-cfloat :data-type-cdouble))
@@ -206,6 +215,7 @@ compression between frames."
   "Return the value, or values of ATTRIBUTE within IM-FILE. In
 general, attributes are multi-valued, thus they attribute value is a
 sequence."
+  (check-type im-file im-file)
   (cffi:with-foreign-objects
       ((data-type-ptr 'im-cffi::data-type)
        (count-ptr :int))
@@ -217,6 +227,7 @@ sequence."
 
 (defun attribute-1 (im-file attribute)
   "Like ATTRIBUTE but returns the first value for ATTRIBUTE."
+  (check-type im-file im-file)
   (multiple-value-bind
         (attributes data-type count)
       (attribute im-file attribute)
@@ -225,15 +236,18 @@ sequence."
 
 (defun (setf attribute-string) (new-value im-file attribute)
   "Set the string value of ATTRIBUTE."
+  (check-type im-file im-file)
   (im-cffi::%im-file-set-attribute-string im-file attribute new-value)
   new-value)
 
 (defun attribute-string (im-image attribute)
   "Get the string value of ATTRIBUTE."
+  (check-type im-image im-image)
   (im-cffi::%im-image-get-attrib-string im-image attribute))
 
 (defun attributes (im-file)
   "Return file attribute names as a list of strings."
+  (check-type im-file im-file)
   (cffi:with-foreign-object
       (attrib-count-ptr :int)
     (im-cffi::%im-file-get-attribute-list im-file (cffi:null-pointer) attrib-count-ptr)
@@ -248,6 +262,7 @@ sequence."
 (defun palette (im-file)
   "Returns the palette as a non-empty SEQUENCE of up to 256 colors or
 NIL if there is no palette."
+  (check-type im-file im-file)
   (cffi:with-foreign-objects
       ((palette-ptr :long 256)
        (count-ptr :int))
@@ -263,6 +278,7 @@ NIL if there is no palette."
 (defun (setf palette) (new-palette im-file)
   "Changes the palette to to NEW-PALETTE. NEW-PALETTE must be
 non-empty SEQUENCE of up to 256 colors."
+  (check-type im-file im-file)
   (let ((count (length new-palette)))
     (assert (<= 1 count 256))
     (cffi:with-foreign-objects
@@ -288,6 +304,7 @@ between 0 and IMAGE-COUNT - 1.
 Some drivers read only in sequence, so INDEX can be ignored by the
 format driver. This function must be called at least once, check each
 format documentation."
+  (check-type im-file im-file)
   (cffi:with-foreign-objects
       ((width-ptr :int)
        (height-ptr :int)
@@ -313,6 +330,7 @@ match file format specification.
 
 Signals IM-ERROR on an error. This function must be called at least
 once, check the documentation for each format."
+  (check-type im-file im-file)
   (im::maybe-error
    (im-cffi::%im-file-write-image-info
     im-file
@@ -337,6 +355,7 @@ then unpacked, no alpha and bottom up is used. If COLOR-MODE-CONFIG is
 NIL the file original flags are used.
 
 Signals IM-ERROR on an error."
+  (check-type im-file im-file)
   (im::maybe-error
    (im-cffi::%im-file-read-image-data
     im-file
@@ -351,6 +370,7 @@ Signals IM-ERROR on an error."
   "Writes the image data. 
 
 Signals IM-ERROR on an error."
+  (check-type im-file im-file)
   (im::maybe-error (im-cffi::%im-file-write-image-data im-file data-ptr)))
 
 ;;; these are defined in im_image.h, but are "im-file" related
@@ -364,6 +384,7 @@ color space and data type of the image in the file. Attributes from
 the file will be stored at the image.
 
 Signals IM-ERROR on an error."
+  (check-type im-file im-file)
   (cffi:with-foreign-object
       (error-ptr 'im-cffi::error-code)
     (prog1
@@ -381,6 +402,8 @@ image in the file. Attributes from the file will be stored at the
 image.
 
 Signals IM-ERROR on an error."
+  (check-type im-file im-file)
+  (check-type im-image im-image)
   (cffi:with-foreign-object
       (error-ptr 'im-cffi::error-code)
     (prog1
@@ -399,6 +422,7 @@ INDEX specifies the image number. Attributes from the file will be
 stored at the image.
 
 Signals IM-ERROR on error."
+  (check-type im-file im-file)
   (cffi:with-foreign-object
       (error-ptr 'im-cffi::error-code)
     (prog1
@@ -417,6 +441,7 @@ image. Attributes from the file will be stored at the image.
 For now, it works only for the ECW file format.
 
 Signals IM-ERROR on error"
+  (check-type im-file im-file)
   (cffi:with-foreign-object
       (error-ptr 'im-cffi::error-code)
     (prog1
@@ -441,6 +466,8 @@ the image number. Attributes from the file will be stored at the
 image.
 
 Signals IM-ERROR on error."
+  (check-type im-file im-file)
+  (check-type im-image im-image)
   (cffi:with-foreign-object
       (error-ptr 'im-cffi::error-code)
     (prog1
@@ -454,6 +481,8 @@ This will call WRITE-IMAGE-INFO and WRITE-IMAGE-DATA. Attributes from
 the image will be stored in the file.
 
 Signals IM-ERROR on error."
+  (check-type im-file im-file)
+  (check-type im-image im-image)
   (im::maybe-error (im-cffi::%im-file-save-image im-file im-image)))
 
 (defun image-load (pathname-or-namestring &optional (index 0))
@@ -520,6 +549,7 @@ Open saves and closes the file. Attributes from the image will be
 store in the file.
 
 Signals IM-ERROR on error."
+  (check-type im-image im-image)
   (im::maybe-error
    (im-cffi::%im-file-image-save
     (%as-filename pathname-or-namestring)

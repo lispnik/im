@@ -3,6 +3,8 @@
 	#:cffi
 	#:serapeum)
   (:shadow #:reshape)
+  (:import-from #:im-cffi #:im-file #:im-image)
+  (:import-from #:trivial-wrapper #:wrapper-pointer)
   (:export #:create
            #:init
            #:create-based
@@ -60,6 +62,7 @@ only addtional flag that color-mode can have here is
 (defun create-based (im-image &optional width height color-space data-type)
   "Creates a new image based on an existing one. The image atributes
 always are copied. HasAlpha is copied."
+  (check-type im-image im-image)
   (im-cffi::%im-image-create-based
    im-image
    (or width -1)
@@ -74,6 +77,7 @@ always are copied. HasAlpha is copied."
 (defun destroy (im-image &optional (destroy-data-p t))
   "Destroys the image and frees the memory used. If DESTROY-DATA-P is
 non-NIL then also destroy the image data."
+  (check-type im-image im-image)
   (unless destroy-data-p
     (setf (cffi:foreign-slot-value
            im-image
@@ -81,29 +85,41 @@ non-NIL then also destroy the image data."
           (cffi:null-pointer)))
   (im-cffi::%im-image-destroy im-image))
 
-(defalias add-alpha #'im-cffi::%im-image-add-alpha
-  "Adds an alpha channel plane and sets its value to
-0 (transparent).")
+(defun add-alpha (im-image)
+  "Adds an alpha channel plane and sets its value to 0 (transparent)."
+  (check-type im-image im-image)
+  (im-cffi::%im-image-add-alpha im-image))
 
 (defun (setf alpha) (new-alpha im-image)
   "Sets the alpha channel plane to a constant."
+  (check-type im-image im-image)
   (im-cffi::%im-image-set-alpha im-image (coerce new-alpha 'single-float))  
   new-alpha)
 
-(defalias remove-alpha #'im-cffi::%im-image-add-alpha
-  "Removes the alpha channel plane if any.")
+(defun remove-alpha (im-image)
+  "Removes the alpha channel plane if any."
+  (check-type im-image im-image)
+  (im-cffi::%im-image-remove-alpha im-image))
 
-(defalias reshape #'im-cffi::%im-image-reshape
+(defun reshape (im-image width height)
   "Changes the buffer size. Reallocate internal buffers if the new
-size is larger than the original.")
+size is larger than the original."
+  (check-type im-image im-image)
+  (im-cffi::%im-image-reshape im-image width height))
 
-(defalias copy #'im-cffi::%im-image-copy
+(defun copy (src-im-image dst-im-image)
   "Copy image data and attributes from one image to another. Images
-must have the same size and type.")
+must have the same size and type."
+  (check-type src-im-image im-image)
+  (check-type dst-im-image im-image)
+  (im-cffi::%im-image-copy src-im-image dst-im-image))
 
-(defalias copy-data #'im-cffi::%im-image-copy-data
+(defun copy-data (src-im-image dst-im-image)
   "Copy image data only fom one image to another. Images must have the
-same size and type.")
+same size and type."
+  (check-type src-im-image im-image)
+  (check-type dst-im-image im-image)
+  (im-cffi::%im-image-copy-data src-im-image dst-im-image))
 
 (defalias copy-attributes #'im-cffi::%im-image-copy-attributes
   "Copies the image attributes from SRC to DST. Includes the pallete
@@ -186,33 +202,39 @@ in-place. Color space is not changed. Data type must be IM_BYTE.")
 in-place. Color space is not changed. Data type must be IM_BYTE.")
 
 (defun width (im-image)
+  (check-type im-image im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::width))
+   (wrapper-pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::width))
 
 (defun height (im-image)
+  (check-type im-image im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::height))
+   (wrapper-pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::height))
 
 (defun size (im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::size))
+   (wrapper-pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::size))
 
 (defun data (im-image plane)
-  ;; FIXME do better here with bounds for plane
+  (check-type im-image im-image)
+  (assert (<= 0 plane (1- (depth im-image))))
   (cffi:mem-aref
    (cffi:foreign-slot-value
-    im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data)
+    (wrapper-pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::data)
    :pointer
    plane))
 
 (defun data-type (im-image)
+  (check-type im-image im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data-type))
+   (wrapper-pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::data-type))
 
 (defun color-space (im-image)
+  (check-type im-image im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::color-space))
+   (wrapper-pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::color-space))
 
 (defun depth (im-image)
+  (check-type im-image im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::depth))
+   (wrapper-pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::depth))
