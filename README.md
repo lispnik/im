@@ -81,14 +81,14 @@ Load the examples system with `(ql:quickload '("im" "im-examples"))`.
 
 [cheese.lisp](https://github.com/lispnik/im/blob/master/examples/cheese.lisp)
 
-Write a raw, 8-bit, grayscale image using the first image capture
-device (which is probably a webcam).
+Write an 8-bit, grayscale image using the first image capture
+device (which is probably a webcam) to a JPEG file.
 
 ```lisp
 CL-USER> (im-examples.cheese:cheese)
 Say CHEESE! (and press enter)
 
-C:/Users/Example/AppData/Local/Temp/tmpXLS8LL7R-tmp.dat
+capture-3756857502.jpg
 (COLOR-MODE-CONFIG-PACKED)
 COLOR-SPACE-GRAY
 DATA-TYPE-BYTE
