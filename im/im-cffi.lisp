@@ -1,6 +1,6 @@
 (defpackage #:im-cffi
   (:use #:common-lisp)
-  (:import-from #:trivial-wrapper #:define-wrapper)
+  (:import-from #:fpw #:define-foreign-pointer-wrapper)
   (:export #:im-file
 	   #:im-image
 	   #:make-im-file
@@ -62,8 +62,8 @@
   :error-code-mem
   :error-code-counter)
 
-(define-wrapper im-file)
-(define-wrapper im-image)
+(define-foreign-pointer-wrapper im-file)
+(define-foreign-pointer-wrapper im-image)
 
 (cffi:defcfun (%im-file-open "imFileOpen") im-file
   (filename :string)
@@ -296,25 +296,25 @@
   (height :int))
 
 (cffi:defcfun (%im-image-copy "imImageCopy") :void
-  (im-image-src im-image)
-  (im-image-dst im-image))
+  (src-im-image im-image)
+  (dst-im-image im-image))
 
 (cffi:defcfun (%im-image-copy-data "imImageCopyData") :void
-  (im-image-src im-image)
-  (im-image-dst im-image))
+  (src-im-image im-image)
+  (dst-im-image im-image))
 
 (cffi:defcfun (%im-image-copy-attributes "imImageCopyAttributes") :void
-  (im-image-src im-image)
-  (im-image-dst im-image))
+  (src-im-image im-image)
+  (dst-im-image im-image))
 
 (cffi:defcfun (%im-image-merge-attributes "imImageMergeAttributes") :void
-  (im-image-src im-image)
-  (im-image-dst im-image))
+  (src-im-image im-image)
+  (dst-im-image im-image))
 
 (cffi:defcfun (%im-image-copy-plane "imImageCopyPlane") :void
-  (im-image-src im-image)
+  (src-im-image im-image)
   (src-plane :int)
-  (im-image-dst im-image)
+  (dst-im-image im-image)
   (dst-plane :int))
 
 (cffi:defcfun (%im-image-duplicate "imImageDuplicate") :void
