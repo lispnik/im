@@ -81,16 +81,15 @@ non-NIL then also destroy the image data."
           (cffi:null-pointer)))
   (im-cffi::%im-image-destroy im-image))
 
-(defalias add-alpha #'im-cffi::%im-image-add-alpha
-  "Adds an alpha channel plane and sets its value to
-0 (transparent).")
+(defalias add-alpha #'im-cffi::%im-image-add-alpha 
+  "Adds an alpha channel plane and sets its value to 0 (transparent).")
 
 (defun (setf alpha) (new-alpha im-image)
   "Sets the alpha channel plane to a constant."
   (im-cffi::%im-image-set-alpha im-image (coerce new-alpha 'single-float))  
   new-alpha)
 
-(defalias remove-alpha #'im-cffi::%im-image-add-alpha
+(defalias remove-alpha #'im-cffi::%im-image-remove-alpha 
   "Removes the alpha channel plane if any.")
 
 (defalias reshape #'im-cffi::%im-image-reshape
@@ -198,7 +197,7 @@ in-place. Color space is not changed. Data type must be IM_BYTE.")
    im-image '(:struct im-cffi::im-image-struct) 'im-cffi::size))
 
 (defun data (im-image plane)
-  ;; FIXME do better here with bounds for plane
+  (assert (<= 0 plane (1- (depth im-image))))
   (cffi:mem-aref
    (cffi:foreign-slot-value
     im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data)

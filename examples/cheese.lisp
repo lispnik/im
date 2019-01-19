@@ -24,20 +24,19 @@
 			 (data-size (im:image-data-size width height color-mode-config color-space data-type))
 			 (data (static-vectors:make-static-vector data-size :element-type '(unsigned-byte 8) :initial-element 0)))
 		    (unwind-protect
-			 (uiop:with-temporary-file
-			     (:stream stream
-			      :pathname temp-pathname
-                              :keep t
-                              :direction :output
-                              :element-type '(unsigned-byte 8) :type "dat")
+			 (let ((pathname (format nil "capture-~A.jpg" (get-universal-time))))
 			   (im-capture:capture-frame context data color-mode-config color-space)
-			   (write-sequence data stream)
-			   (format t "~A~%~A~%~A~%~A~%~Ax~A~%"
-				   temp-pathname
-				   color-mode-config color-space
-				   data-type
-				   width height)
-)
+			   (let ((file (im-file:new pathname "JPEG")))
+			     (unwind-protect
+				  (progn
+				    (format t "~A~%~A~%~A~%~A~%~Ax~A~%"
+					    pathname
+					    color-mode-config color-space
+					    data-type
+					    width height)
+				    (im-file:write-image-info file width height color-mode-config color-space data-type)
+				    (im-file:write-image-data file (static-vectors:static-vector-pointer data)))
+			       (im-file:close file))))
 		      (static-vectors:free-static-vector data))))
 	        (im-capture:live context nil))
 	   (im-capture:disconnect context))

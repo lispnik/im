@@ -33,38 +33,39 @@
            #:image-load
            #:image-load-bitmap
            #:image-load-region
-           #:image-save))
+           #:image-save)
+  (:import-from #:im-cffi #:im-file #:im-image))
 
 (in-package #:im-file)
 
 (defun %as-filename (pathname-or-namestring)
   (namestring (translate-logical-pathname pathname-or-namestring)))
 
-(defun open (pathname)
+(defun open (pathname-or-namestring)
   "Opens the file for reading. It must exists. Also reads file
 header. It will try to identify the file format."
-  (let ((filename (%as-filename pathname)))
+  (let ((filename (%as-filename pathname-or-namestring)))
     (cffi:with-foreign-object
 	(error-code-ptr 'im-cffi::error-code)
       (let ((result (im-cffi::%im-file-open filename error-code-ptr)))
 	(or (im::maybe-error (cffi:mem-ref error-code-ptr 'im-cffi::error-code))
 	    result)))))
 
-(defun open-as (pathname format)
+(defun open-as (pathname-or-namestring format)
   "Opens the file for reading using a specific format. It must
 exists. Also reads file header."
-  (let ((filename (%as-filename pathname)))
+  (let ((filename (%as-filename pathname-or-namestring)))
     (cffi:with-foreign-object
 	(error-code-ptr 'im-cffi::error-code)
       (let ((result (im-cffi::%im-file-open-as filename format error-code-ptr)))
 	(or (im::maybe-error (cffi:mem-ref error-code-ptr 'im-cffi::error-code))
 	    result)))))
 
-(defun new (pathname format)
+(defun new (pathname-or-namestring format)
   "Creates a new file for writing using a specific format. If the file
 exists will be replaced. It will only initialize the format driver and
 create the file, no data is actually written."
-  (let ((filename (%as-filename pathname)))
+  (let ((filename (%as-filename pathname-or-namestring)))
     (cffi:with-foreign-object
 	(error-code-ptr 'im-cffi::error-code)
       (let ((result (im-cffi::%im-file-new filename format error-code-ptr)))
@@ -416,7 +417,7 @@ image. Attributes from the file will be stored at the image.
 
 For now, it works only for the ECW file format.
 
-Signals IM-ERROR on error"
+Signals IM-ERROR on error."
   (cffi:with-foreign-object
       (error-ptr 'im-cffi::error-code)
     (prog1
