@@ -2,6 +2,7 @@
   :serial t
   :pathname "process"
   :components ((:file "process")
-	       (:file "statistics"))
+	       (:file "statistics")
+	       (:file "morph"))
   :depends-on (#:im
                #:im-process-cffi))

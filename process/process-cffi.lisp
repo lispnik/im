@@ -1,6 +1,7 @@
 (defpackage #:im-process-cffi
   (:use #:common-lisp
-	#:im-cffi))
+	#:im-cffi)
+  (:export #:counter-aborted))
 
 (in-package #:im-process-cffi)
 
@@ -18,28 +19,37 @@
 
 (cffi:use-foreign-library lib-im-process)
 
+(define-condition counter-aborted () ())
+
+(cffi:defctype counter-aborted
+    (:wrapper :boolean
+     :from-c #'(lambda (value)
+		 (unless value
+		   (signal 'counter-aborted)))
+     :to-c nil))
+
 ;;; im_process_ana.h
 
-(cffi:defcfun (%im-calc-rms-error "imCalcRMSError") :boolean
+(cffi:defcfun (%im-calc-rms-error "imCalcRMSError") counter-aborted
   (im-image-1 im-image)
   (im-image-2 im-image)
   (rms-error-ptr (:pointer :double)))
 
-(cffi:defcfun (%im-calc-snr "imCalcSNR") :boolean
+(cffi:defcfun (%im-calc-snr "imCalcSNR") counter-aborted
   (src-im-image im-image)
   (noise-im-image im-image)
   (snr-ptr (:pointer :double)))
 
-(cffi:defcfun (%im-calc-count-colors "imCalcCountColors") :boolean
+(cffi:defcfun (%im-calc-count-colors "imCalcCountColors") counter-aborted
   (im-image im-image)
   (count-ptr (:pointer :double)))
 
-(cffi:defcfun (%im-calc-gray-histogram "imCalcGrayHistogram") :boolean
+(cffi:defcfun (%im-calc-gray-histogram "imCalcGrayHistogram") counter-aborted
   (im-image im-image)
   (histo-ptr (:pointer :long))
   (cumulative :boolean))
 
-(cffi:defcfun (%im-calc-histogram "imCalcHistogram") :boolean
+(cffi:defcfun (%im-calc-histogram "imCalcHistogram") counter-aborted
   (im-image im-image)
   (histo-ptr (:pointer :long))
   (plane :int)
@@ -64,17 +74,17 @@
   (cumulative :boolean))
 
 (cffi:defcfun (%im-histogram-new "imHistogramNew") (:pointer :unsigned-long)
-  (data-type data-type)
+  (data-type im-cffi::data-type)
   (hcount-ptr (:pointer :int)))
 
 (cffi:defcfun (%im-histogram-release "imHistogramRelease") :void
   (histo-ptr (:pointer :unsigned-long)))
 
 (cffi:defcfun (%im-histogram-shift "imHistogramShift") :int
-  (data-type data-type))
+  (data-type im-cffi::data-type))
 
 (cffi:defcfun (%im-histogram-count "imHistogramCount") :int
-  (data-type data-type))
+  (data-type im-cffi::data-type))
 
 (cffi:defcstruct im-stats-struct
   (max :double)
@@ -87,20 +97,20 @@
 
 (cffi:defctype im-stats (:pointer (:struct im-stats-struct)))
 
-(cffi:defcfun (%im-calc-image-statistics "imCalcImageStatistics") :boolean
+(cffi:defcfun (%im-calc-image-statistics "imCalcImageStatistics") counter-aborted
   (image im-image)
   (stats im-stats))
 
-(cffi:defcfun (%im-calc-histogram-statistics "imCalcHistogramStatistics") :boolean
+(cffi:defcfun (%im-calc-histogram-statistics "imCalcHistogramStatistics") counter-aborted
   (image im-image)
   (stats im-stats))
 
-(cffi:defcfun (%im-calc-histo-image-statistics "imCalcHistoImageStatistics") :boolean
+(cffi:defcfun (%im-calc-histo-image-statistics "imCalcHistoImageStatistics") counter-aborted
   (image im-image)
   (median (:pointer :int))
   (mode (:pointer :int)))
 
-(cffi:defcfun (%im-calc-percent-min-max "imCalcPercentMinMax") :boolean
+(cffi:defcfun (%im-calc-percent-min-max "imCalcPercentMinMax") counter-aborted
   (image im-image)
   (percent :double)
   (ignore-zero :boolean)
@@ -136,14 +146,14 @@
   (cos0 :double)
   (sin0 :double))
 
-(cffi:defcfun (%im-process-rotate "imProcessRotate") :int
+(cffi:defcfun (%im-process-rotate "imProcessRotate") counter-aborted
   (src-image im-image)
   (dst-image im-image)
   (cos0 :double)
   (sin0 :double)
   (order :int))
 
-(cffi:defcfun (%im-process-rotate-ref "imProcessRotateRef") :int
+(cffi:defcfun (%im-process-rotate-ref "imProcessRotateRef") counter-aborted
   (src-image im-image)
   (dst-image im-image)
   (cos0 :double)
@@ -153,30 +163,30 @@
   (to-origin :boolean)
   (order :int))
 
-(cffi:defcfun (%im-process-rotate-90 "imProcessRotate90") :boolean
+(cffi:defcfun (%im-process-rotate-90 "imProcessRotate90") counter-aborted
   (src-image im-image)
   (dst-image im-image)
   (dir-clockwise :int))
 
-(cffi:defcfun (%im-process-rotate-180 "imProcessRotate180") :boolean
+(cffi:defcfun (%im-process-rotate-180 "imProcessRotate180") counter-aborted
   (src-image im-image)
   (dst-image im-image))
 
-(cffi:defcfun (%im-process-mirror "imProcessMirror") :boolean
+(cffi:defcfun (%im-process-mirror "imProcessMirror") counter-aborted
   (src-image im-image)
   (dst-image im-image))
 
-(cffi:defcfun (%im-process-flip "imProcessFlip") :boolean
+(cffi:defcfun (%im-process-flip "imProcessFlip") counter-aborted
   (src-image im-image)
   (dst-image im-image))
 
-(cffi:defcfun (%im-process-radial "imProcessRadial") :boolean
+(cffi:defcfun (%im-process-radial "imProcessRadial") counter-aborted
   (src-image im-image)
   (dst-image im-image)
   (k1 :double)
   (order :int))
 
-(cffi:defcfun (%im-process-lens-distort "imProcessLensDistort") :boolean
+(cffi:defcfun (%im-process-lens-distort "imProcessLensDistort") counter-aborted
   (src-image im-image)
   (dst-image im-image)
   (a :double)
@@ -184,13 +194,95 @@
   (c :double)
   (order :int))
 
-(cffi:defcfun (%im-process-swirl "imProcessSwirl") :boolean
+(cffi:defcfun (%im-process-swirl "imProcessSwirl") counter-aborted
   (src-image im-image)
   (dst-image im-image)
   (k1 :double)
   (order :int))
 
-(cffi:defcfun (%im-process-interlace-split "imProcessInterlaceSplit") :boolean
+(cffi:defcfun (%im-process-interlace-split "imProcessInterlaceSplit") counter-aborted
   (src-image im-image)
   (dst-image1 im-image)
   (dst-image2 im-image))
+
+(cffi:defcfun (%im-process-gray-morph-convolve "imProcessGrayMorphConvolve") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernal im-image)
+  (is-max :boolean))
+
+(cffi:defcfun (%im-process-gray-morph-erode "imProcessGrayMorphErode") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int))
+
+(cffi:defcfun (%im-process-gray-morph-dilate "imProcessGrayMorphDilate") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int))
+
+(cffi:defcfun (%im-process-gray-morph-open "imProcessGrayMorphOpen") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int))
+
+(cffi:defcfun (%im-process-gray-morph-close "imProcessGrayMorphClose") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int))
+
+(cffi:defcfun (%im-process-gray-morph-top-hat "imProcessGrayMorphTopHat") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int))
+
+(cffi:defcfun (%im-process-gray-morph-well "imProcessGrayMorphWell") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int))
+
+(cffi:defcfun (%im-process-gray-morph-gradient "imProcessGrayMorphGradient") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int))
+
+(cffi:defcfun (%im-process-bin-morph-convolve "imProcessBinMorphConvolve") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel im-image)
+  (hit-white :boolean)
+  (iter :int))
+
+(cffi:defcfun (%im-process-bin-morph-erode "imProcessBinMorphErode") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int)
+  (iter :int))
+
+(cffi:defcfun (%im-process-bin-morph-dilate "imProcessBinMorphDilate") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int)
+  (iter :int))
+
+(cffi:defcfun (%im-process-bin-morph-dilate "imProcessBinMorphOpen") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int)
+  (iter :int))
+
+(cffi:defcfun (%im-process-bin-morph-close "imProcessBinMorphClose") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int)
+  (iter :int))
+
+(cffi:defcfun (%im-process-bin-morph-outline "imProcessBinMorphOutline") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (kernel-size :int)
+  (iter :int))
+
+(cffi:defcfun (%im-process-bin-morph-thin "imProcessBinMorphThin") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image))
