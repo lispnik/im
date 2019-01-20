@@ -24,11 +24,10 @@ Error).
 
 Signals COUNTER-ABORTED if the counter aborted."
   (cffi:with-foreign-object (rms-error-ptr :double)
-    (if (im-process-cffi::%im-calc-rms-error
-	 im-image-1 im-image-2
-	 rms-error-ptr)
-	(cffi:mem-ref rms-error-ptr :double)
-	(signal 'counter-aborted))))
+    (im-process-cffi::%im-calc-rms-error
+     im-image-1 im-image-2
+     rms-error-ptr)
+    (cffi:mem-ref rms-error-ptr :double)))
 
 (defun snr (src-im-image noise-im-image)
   "Calculates the SNR of an image and its noise (Signal Noise
@@ -36,11 +35,10 @@ Ratio).
 
 Signals COUNTER-ABORTED if the counter aborted."
   (cffi:with-foreign-object (snr-ptr :double)
-    (if (im-process-cffi::%im-calc-snr
-	 src-im-image noise-im-image
-	 snr-ptr)
-	(cffi:mem-ref snr-ptr :double)
-	(signal 'counter-aborted))))
+    (im-process-cffi::%im-calc-snr
+     src-im-image noise-im-image
+     snr-ptr)
+    (cffi:mem-ref snr-ptr :double)))
 
 (defun count-colors (im-image)
   "Count the number of different colors in an image. 
@@ -64,9 +62,8 @@ Signals COUNTER-ABORTED if the counter aborted."
 	      (member color-space
 		      '(:color-space-gray :color-space-binary :color-space-map))))))
   (cffi:with-foreign-object (count-ptr :unsigned-long)
-    (if (im-process-cffi::%im-calc-count-colors im-image count-ptr)
-	(cffi:mem-ref count-ptr :unsigned-long)
-	(signal 'counter-aborted))))
+    (im-process-cffi::%im-calc-count-colors im-image count-ptr)
+    (cffi:mem-ref count-ptr :unsigned-long)))
 
 ;;; TODO...
 
@@ -89,17 +86,16 @@ Signals COUNTER-ABORTED if the counter aborted."
   (let ((depth (im-image:depth im-image)))
     (cffi:with-foreign-object
 	(stats-ptr '(:struct im-process-cffi::im-stats-struct) depth)
-      (if (im-process-cffi::%im-calc-image-statistics im-image stats-ptr)
-	  (loop with result = (make-array depth :element-type 'stats)
-		and size = (cffi:foreign-type-size 'im-process-cffi::im-stats-struct)
-		for i below depth
-		for stats-i-ptr = (cffi:inc-pointer
-				   stats-ptr
-				   (* i size))
-		do (setf (aref result i)
-			 (make-instance 'stats :pointer stats-i-ptr))
-		finally (return result))
-	  (signal 'counter-aborted)))))
+      (im-process-cffi::%im-calc-image-statistics im-image stats-ptr)
+      (loop with result = (make-array depth :element-type 'stats)
+	    and size = (cffi:foreign-type-size 'im-process-cffi::im-stats-struct)
+	    for i below depth
+	    for stats-i-ptr = (cffi:inc-pointer
+			       stats-ptr
+			       (* i size))
+	    do (setf (aref result i)
+		     (make-instance 'stats :pointer stats-i-ptr))
+	    finally (return result)))))
 
 
 (defstruct stats-extra median mode)
@@ -120,16 +116,15 @@ Signals COUNTER-ABORTED if the counter aborted."
     (cffi:with-foreign-objects
 	((median-ptr :int depth)
 	 (mode-ptr :int depth))
-      (if (im-process-cffi::%im-calc-histo-image-statistics
-	   im-image median-ptr mode-ptr)
-	  (loop with result = (make-array depth :element-type 'stats-extra)
-		for i below depth
-		for mode = (cffi:mem-aref mode-ptr :int i)
-		do (setf (aref result i)
-			 (make-stats-extra :median (cffi:mem-aref median-ptr :int i)
-					   :mode (if (= -1 mode) nil mode)))
-		finally (return result))
-	  (signal 'counter-aborted)))))
+      (im-process-cffi::%im-calc-histo-image-statistics
+       im-image median-ptr mode-ptr)
+      (loop with result = (make-array depth :element-type 'stats-extra)
+	    for i below depth
+	    for mode = (cffi:mem-aref mode-ptr :int i)
+	    do (setf (aref result i)
+		     (make-stats-extra :median (cffi:mem-aref median-ptr :int i)
+				       :mode (if (= -1 mode) nil mode)))
+	    finally (return result)))))
 
 (defun percent-min-max (im-image percent ignore-zero-p)
   "Calculates the minimum and maximum levels ignoring a given
@@ -143,8 +138,7 @@ Signals COUNTER-ABORTED if the counter aborted."
   (cffi:with-foreign-objects
       ((min-ptr :int)
        (max-ptr :int))
-    (if (im-process-cffi::%im-calc-percent-min-max
-	 im-image (coerce percent 'double-float) ignore-zero-p min-ptr max-ptr)
-	(values (cffi:mem-ref min-ptr :int)
-		(cffi:mem-ref max-ptr :int))
-	(signal 'counter-aborted))))
+    (im-process-cffi::%im-calc-percent-min-max
+     im-image (coerce percent 'double-float) ignore-zero-p min-ptr max-ptr)
+    (values (cffi:mem-ref min-ptr :int)
+	    (cffi:mem-ref max-ptr :int))))
