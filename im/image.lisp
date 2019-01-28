@@ -79,6 +79,7 @@ non-NIL then also destroy the image data."
            im-image
            '(:struct im-cffi::im-image-struct) 'im-cffi::data)
           (cffi:null-pointer)))
+  (tg:cancel-finalization im-image)
   (im-cffi::%im-image-destroy im-image))
 
 (defalias add-alpha #'im-cffi::%im-image-add-alpha 

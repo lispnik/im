@@ -317,10 +317,10 @@
   (dst-im-image im-image)
   (dst-plane :int))
 
-(cffi:defcfun (%im-image-duplicate "imImageDuplicate") :void
+(cffi:defcfun (%im-image-duplicate "imImageDuplicate") im-image
   (im-image im-image))
 
-(cffi:defcfun (%im-image-clone "imImageClone") :void
+(cffi:defcfun (%im-image-clone "imImageClone") im-image
   (im-image im-image))
 
 (cffi:defcfun (%im-image-set-attribute "imImageSetAttribute") :void
