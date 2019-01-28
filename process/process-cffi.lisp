@@ -286,3 +286,101 @@
 (cffi:defcfun (%im-process-bin-morph-thin "imProcessBinMorphThin") counter-aborted
   (src-im-image im-image)
   (dst-im-image im-image))
+
+;;; im_process_pnt.h
+
+;; ... TODO
+
+(cffi:defctype im-render-func :pointer)
+(cffi:defctype im-render-cond-func :pointer)
+
+(cffi:defcfun (%im-process-render-op "imProcessRenderOp") counter-aborted
+  (im-image im-image)
+  (func im-render-func)
+  (render-name :string)
+  (params (:pointer :double))
+  (plus :boolean))
+
+(cffi:defcfun (%im-process-render-cond-op "imProcessRenderCondOp") counter-aborted
+  (im-image im-image)
+  (func im-render-cond-func)
+  (render-name :string)
+  (params (:pointer :double)))
+
+(cffi:defcfun (%im-process-render-add-speckle-noise "imProcessRenderAddSpeckleNoise") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (percent :double))
+
+(cffi:defcfun (%im-process-render-add-gaussian-noise "imProcessRenderAddGuassianNoise") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (mean :double)
+  (std-dev :double))
+
+(cffi:defcfun (%im-process-render-add-uniform-noise "imProcessRenderAddUnifromNoise") counter-aborted
+  (src-im-image im-image)
+  (dst-im-image im-image)
+  (mean :double)
+  (std-dev :double))
+
+(cffi:defcfun (%im-process-render-random-noise "imProcessRenderRandomNoise") counter-aborted
+  (im-image im-image))
+
+(cffi:defcfun (%im-process-render-constant "imProcessRenderConstant") counter-aborted
+  (im-image im-image)
+  (value (:pointer :double)))
+
+(cffi:defcfun (%im-process-render-wheel "imProcessRenderWheel") counter-aborted
+  (im-image im-image)
+  (internal-radius :int)
+  (external-radius :int))
+
+(cffi:defcfun (%im-process-render-tent "imProcessRenderTent") counter-aborted
+  (im-image im-image)
+  (tent-width :int)
+  (tent-heoght :int))
+
+(cffi:defcfun (%im-process-render-ramp "imProcessRenderRamp") counter-aborted
+  (im-image im-image)
+  (start :int)
+  (end :int)
+  (vertical-direction-p :boolean))
+
+(cffi:defcfun (%im-process-render-box "imProcessRenderBox") counter-aborted
+  (im-image im-image)
+  (width :int)
+  (height :int))
+
+(cffi:defcfun (%im-process-render-sinc "imProcessRenderSinc") counter-aborted
+  (im-image im-image)
+  (x-period :double)
+  (y-period :double))
+
+(cffi:defcfun (%im-process-render-gaussian "imProcessRenderGuassian") counter-aborted
+  (im-image im-image)
+  (std-dev :double))
+
+(cffi:defcfun (%im-process-render-lap-of-gaussian "imProcessRenderLapOfGaussian") counter-aborted
+  (im-image im-image)
+  (std-dev :double))
+
+(cffi:defcfun (%im-process-render-cosine "imProcessRenderCosine") counter-aborted
+  (im-image im-image)
+  (x-period :double)
+  (y-period :double))
+
+(cffi:defcfun (%im-process-render-grid "imProcessRenderGrid") counter-aborted
+  (im-image im-image)
+  (x-space :double)
+  (y-space :double))
+
+(cffi:defcfun (%im-process-render-chessboard "imProcessRenderChessboard") counter-aborted
+  (im-image im-image)
+  (x-space :double)
+  (y-space :double))
+
+(cffi:defcfun (%im-process-render-cosine "imProcessRenderCosine") counter-aborted
+  (im-image im-image)
+  (x-period :double)
+  (y-period :double))
