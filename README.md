@@ -84,7 +84,7 @@ Load the examples system with `(ql:quickload '("im" "im-examples"))`.
 Write an 8-bit, grayscale image using the first image capture
 device (which is probably a webcam) to a JPEG file.
 
-```lisp
+```
 CL-USER> (im-examples.cheese:cheese)
 Say CHEESE! (and press enter)
 
