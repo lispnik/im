@@ -1,6 +1,6 @@
 (defpackage #:im-cffi
   (:use #:common-lisp)
-  (:import-from #:fpw #:define-foreign-pointer-wrapper)
+  (:import-from #:pffft #:define-foreign-pointer-wrapper)
   (:export #:im-file
 	   #:im-image
 	   #:make-im-file

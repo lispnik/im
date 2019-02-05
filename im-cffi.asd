@@ -4,4 +4,4 @@
   :components ((:file "im-cffi"))
   :depends-on (#:cffi
                #:trivial-features
-	       #:fpw))
+	       #:pfft))
