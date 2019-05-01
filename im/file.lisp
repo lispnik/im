@@ -393,7 +393,7 @@ Signals IM-ERROR on an error."
   "Loads an image from an already open file, but forces the image to
 be a bitmap.
 
-The returned imagem will be always a bitmap image, with color space
+The returned image will be always a bitmap image, with color space
 :COLOR-SPACE-RGB, :COLOR-SPACE-MAP, :COLOR-SPACE-GRAY or :COLOR-SPACE-BINARY, 
 and data type :DATA-TYPE-BYTE.
 

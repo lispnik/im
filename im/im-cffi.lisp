@@ -1,6 +1,5 @@
 (defpackage #:im-cffi
   (:use #:common-lisp)
-  (:import-from #:pffft #:define-foreign-pointer-wrapper)
   (:export #:im-file
 	   #:im-image
 	   #:make-im-file
@@ -62,8 +61,8 @@
   :error-code-mem
   :error-code-counter)
 
-(define-foreign-pointer-wrapper im-file)
-(define-foreign-pointer-wrapper im-image)
+(cffi:defctype im-file :pointer)
+(cffi:defctype im-image :pointer)
 
 (cffi:defcfun (%im-file-open "imFileOpen") im-file
   (filename :string)

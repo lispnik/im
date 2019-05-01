@@ -3,5 +3,4 @@
   :pathname "im"
   :components ((:file "im-cffi"))
   :depends-on (#:cffi
-               #:trivial-features
-	       #:pffft))
+               #:trivial-features))
