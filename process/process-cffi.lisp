@@ -1,6 +1,6 @@
 (defpackage #:im-process-cffi
   (:use #:common-lisp
-	#:im-cffi)
+        #:im-cffi)
   (:export #:counter-aborted))
 
 (in-package #:im-process-cffi)
@@ -24,8 +24,8 @@
 (cffi:defctype counter-aborted
     (:wrapper :boolean
      :from-c #'(lambda (value)
-		 (unless value
-		   (signal 'counter-aborted)))
+                 (unless value
+                   (signal 'counter-aborted)))
      :to-c nil))
 
 ;;; im_process_ana.h

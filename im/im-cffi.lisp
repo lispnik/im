@@ -1,9 +1,10 @@
 (defpackage #:im-cffi
   (:use #:common-lisp)
-  (:export #:im-file
-	   #:im-image
-	   #:make-im-file
-	   #:make-im-image))
+  (:export #:make-im-file
+           #:make-im-image)
+  (:import-from #:tecgraf-base
+                #:im-image
+                #:im-file))
 
 (in-package #:im-cffi)
 
@@ -60,9 +61,6 @@
   :error-code-compress
   :error-code-mem
   :error-code-counter)
-
-(cffi:defctype im-file :pointer)
-(cffi:defctype im-image :pointer)
 
 (cffi:defcfun (%im-file-open "imFileOpen") im-file
   (filename :string)
@@ -198,7 +196,7 @@
 
 (cffi:defcfun (%im-format-compressions "imFormatCompressions") error-code
   (format :string)
-  (compressions-ptr :pointer)		;NOTE documented as 50 compressions max (char* comp[50])
+  (compressions-ptr :pointer)           ;NOTE documented as 50 compressions max (char* comp[50])
   (compressions-count :pointer)
   (color-mode :int)
   (data-type :int))
@@ -215,11 +213,15 @@
   (filename :string)
   (error-ptr :pointer))
 
-(cffi:defcfun (%im-file-open-raw "imFileNewRaw") im-file
+(cffi:defcfun (%im-file-new-raw "imFileNewRaw") im-file
   (filename :string)
   (error-ptr :pointer))
 
 ;;; im_format_all.h
+
+;;; None
+
+;;; im_format_avi.h
 
 #+windows
 (cffi:defcfun (%im-format-register-avi "imFormatRegisterAVI") :void)
@@ -228,9 +230,9 @@
 
 (cffi:defcfun (%im-format-register-ecw "imFormatRegisterECW") :void)
 
-;;; im_format.h
-
 ;;; im_format_raw.h
+
+;;; None
 
 ;;; im_format_wmv.h
 
@@ -517,6 +519,10 @@
 (cffi:defcfun (%im-color-mode-space-name "imColorModeSpaceName") :string
   (color-mode :int))
 
+(cffi:defcfun (%im-color-mode-component-name "imColorModeComponentName") :string
+  (color-space color-space)
+  (component :int))
+
 (cffi:defcfun (%im-color-mode-depth "imColorModeDepth") :int
   (color-mode :int))
 
@@ -538,6 +544,45 @@
 
 (cffi:defcfun (%im-data-type-int-min "imDataTypeIntMin") :long
   (data-type :int))
+
+;;; TODO binary data utilities
+
+(cffi:defcfun (%im-compress-data-z "imCompressDataZ") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int)
+  (quality :int))
+
+(cffi:defcfun (%im-compress-data-un-z "imCompressDataUnZ") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
+
+(cffi:defcfun (%im-compress-data-lzf "imCompressDataLZF") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
+
+(cffi:defcfun (%im-compress-data-un-lzf "imCompressDataUnLZF") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
+
+(cffi:defcfun (%im-compress-data-lzo "imCompressDataLZO") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
+
+(cffi:defcfun (%im-compress-data-un-lzo "imCompressDataUnLZO") :int
+  (src-data-ptr :pointer)
+  (src-size :int)
+  (dst-data-ptr :pointer)
+  (dst-size :int))
 
 ;;; im_palette.h
 
@@ -593,6 +638,13 @@
   :complex-to-magnitude
   :complex-to-phase)
 
+(cffi:defcenum gamma-factor
+  (:gamma-linear 0)
+  (:gamma-loglite -10)
+  (:gamma-logheavy -1000)
+  (:gamma-explite 2)
+  (:gamma-expheavy 7))
+
 (cffi:defcenum cast-mode
   :cast-mode-minimax
   :cast-mode-fixed
@@ -619,9 +671,15 @@
   (absolute-p :boolean)
   (cast-mode cast-mode))
 
-(cffi:defcfun (%im-convert-color-space "imConvertColorSpace") error-code
-  (src-im-image im-image)
-  (dst-im-image im-image))
+(cffi:defcfun (%im-image-get-opengl-data "imImageGetOpenGLData") :pointer
+  (im-image im-image)
+  (gl-format (:pointer :int)))
+
+(cffi:defcfun (%im-image-create-from-opengl-data "imImageCreateFromOpenGLData") im-image
+  (width :int)
+  (height :int)
+  (gl-format :int)
+  (gl-data :pointer))
 
 (cffi:defcfun (%im-convert-packing "imConvertPacking") :void
   (src-data im-image)
@@ -641,44 +699,26 @@
   (palette palette)
   (palette-count :int))
 
-;;; im_util.h
+(cffi:defcfun (%im-convert-rgb-to-map "imConvertRGBToMap") :int
+  (width :int)
+  (height :int)
+  (red :pointer)
+  (green :pointer)
+  (blue :pointer)
+  (map :pointer)
+  (palette :pointer)
+  (palette-count :pointer))
 
-(cffi:defcfun (%im-compress-data-z "imCompressDataZ") :int
-  (src-data-ptr :pointer)
-  (src-size :int)
-  (dst-data-ptr :pointer)
-  (dst-size :int)
-  (quality :int))
-
-(cffi:defcfun (%im-compress-data-un-z "imCompressDataUnZ") :int
-  (src-data-ptr :pointer)
-  (src-size :int)
-  (dst-data-ptr :pointer)
-  (dst-size :int))
-
-(cffi:defcfun (%im-compress-data-lzf "imCompressDataLZF") :int
-  (src-data-ptr :pointer)
-  (src-size :int)
-  (dst-data-ptr :pointer)
-  (dst-size :int))
-
-(cffi:defcfun (%im-compress-data-un-lzf "imCompressDataUnLZF") :int
-  (src-data-ptr :pointer)
-  (src-size :int)
-  (dst-data-ptr :pointer)
-  (dst-size :int))
-
-(cffi:defcfun (%im-compress-data-un-lzo "imCompressDataLZO") :int
-  (src-data-ptr :pointer)
-  (src-size :int)
-  (dst-data-ptr :pointer)
-  (dst-size :int))
-
-(cffi:defcfun (%im-compress-data-un-lzo "imCompressDataUnLZO") :int
-  (src-data-ptr :pointer)
-  (src-size :int)
-  (dst-data-ptr :pointer)
-  (dst-size :int))
+(cffi:defcfun (%im-convert-rgb-to-map-counter "imConvertRGBToMapCounter") :int
+  (width :int)
+  (height :int)
+  (red :pointer)
+  (green :pointer)
+  (blue :pointer)
+  (map :pointer)
+  (palette :pointer)
+  (palette-count :pointer)
+  (counter :int))
 
 ;;; im_kernel.h
 
@@ -694,8 +734,8 @@
 (cffi:defcfun (%im-kernel-sculpt "imKernelSculpt") im-image)
 (cffi:defcfun (%im-kernel-mean-3x3 "imKernelMean3x3") im-image)
 (cffi:defcfun (%im-kernel-mean-5x5 "imKernelMean5x5") im-image)
-(cffi:defcfun (%im-kernel-mean-7x7 "imKernelMean7x7") im-image)
 (cffi:defcfun (%im-kernel-circular-mean-5x5 "imKernelCircularMean5x5") im-image)
+(cffi:defcfun (%im-kernel-mean-7x7 "imKernelMean7x7") im-image)
 (cffi:defcfun (%im-kernel-circular-mean-7x7 "imKernelCircularMean7x7") im-image)
 (cffi:defcfun (%im-kernel-guassian-3x3 "imKernelGausian3x3") im-image)
 (cffi:defcfun (%im-kernel-guassian-5x5 "imKernelGausian5x5") im-image)
