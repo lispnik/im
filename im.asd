@@ -10,7 +10,7 @@
                (:file "version")
                (:file "error")
                (:file "util")
-	       (:file "file")
+               (:file "file")
                (:file "format")
                (:file "palette")
                (:file "convert")
