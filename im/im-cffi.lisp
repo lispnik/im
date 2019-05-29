@@ -13,6 +13,13 @@
   (:windows "im.dll")
   (t (:default "im")))
 
+#+linux
+(cffi:define-foreign-library lib-png
+  (:unix "libpng.so"))
+
+#+linux
+(cffi:use-foreign-library lib-png)
+
 (cffi:use-foreign-library lib-im)
 
 (cffi:defctype palette (:pointer :long))

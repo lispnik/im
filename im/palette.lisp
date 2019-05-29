@@ -1,23 +1,17 @@
-(defpackage #:im-palette
-  (:use #:common-lisp
-	#:cffi
-	#:serapeum)
-  (:shadow #:count
-           #:sequence)
-  (:export #:data
-           #:count
-           #:sequence
-           #:new
-           #:new-from
-           #:release
-           #:duplicate
-           #:find-nearest
-           #:find-color
-           #:cyan
-           #:uniform-index
-           #:uniform-index-halftoned))
-
 (in-package #:im-palette)
+
+(export '(data
+          count
+          sequence
+          new
+          new-from
+          release
+          duplicate
+          find-nearest
+          find-color
+          cyan
+          uniform-index
+          uniform-index-halftoned))
 
 (defclass palette ()
   ((data :type cffi:foreign-pointer
@@ -50,7 +44,7 @@
                  (cffi:mem-aref data :long i))
         finally (return entries)))
 
-(defun  new (count)
+(defun new (count)
   "Allocates memory for the palette data. This ensures allocation and
 release in the same module by the correct functions. NOTE: Unlike the
 C API, this function will initialize palette entries to 0."
@@ -112,58 +106,47 @@ range."
            palette))
        (export ',name))))
 
-(%define-palette gray
-  "Creates a palette of gray scale values.
+(%define-palette gray "Creates a palette of gray scale values.
 The colors are arranged from black to white.")
 
-(%define-palette red
-  "Creates a palette of a gradient of red colors. 
+(%define-palette red "Creates a palette of a gradient of red colors. 
 The colors are arranged from black to pure red.")
 
-(%define-palette green
-  "Creates a palette of a gradient of green colors. 
+(%define-palette green "Creates a palette of a gradient of green colors. 
 The colors are arranged from black to pure red.")
 
-(%define-palette blue
-  "Creates a palette of a gradient of red colors. 
+(%define-palette blue "Creates a palette of a gradient of red colors. 
 The colors are arranged from black to pure red.")
 
-(%define-palette magenta
-  "Creates a palette of a gradient of magenta colors. 
+(%define-palette magenta "Creates a palette of a gradient of magenta colors. 
 The colors are arranged from black to pure magenta.")
 
-(%define-palette cian
-  "Creates a palette of a gradient of cian colors. 
+(%define-palette cian "Creates a palette of a gradient of cian colors. 
 The colors are arranged from black to pure cian.")
 
 (setf (symbol-function 'cyan) #'cian)
 
-(%define-palette rainbow
-  "Creates a palette of rainbow colors. 
+(%define-palette rainbow "Creates a palette of rainbow colors. 
 The colors are arranged in the light wave length spectrum
 order (starting from purple).")
 
-(%define-palette hues
-  "Creates a palette of hues with maximum saturation.")
+(%define-palette hues "Creates a palette of hues with maximum saturation.")
 
-(%define-palette blue-ice
-  "Creates a palette of a gradient of blue colors.
+(%define-palette blue-ice "Creates a palette of a gradient of blue colors.
 The colors are arranged from pure blue to white.")
 
-(%define-palette hot-iron
-  "Creates a palette of a gradient from black to white passing through
-red and orange.")
+(%define-palette hot-iron "Creates a palette of a gradient from black to 
+white passing through red and orange.")
 
-(%define-palette high-contrast
-  "Creates a palette with high contrast colors.")
+(%define-palette high-contrast "Creates a palette with high contrast colors.")
 
-(%define-palette linear
-  "Creates a palette of a sequence of colors from black to white with
-32 linear intensity values combined with 8 hue variations.")
+(%define-palette linear "Creates a palette of a sequence of colors from black 
+to white with 32 linear intensity values combined 
+with 8 hue variations.")
 
-(%define-palette uniform
-  "Creates a palette of an uniform sub-division of colors from black
-to white. This is a 2^(2.6) bits per pixel palette.")
+(%define-palette uniform "Creates a palette of an uniform sub-division of 
+colors from black to white. This is a 2^(2.6) 
+bits per pixel palette.")
 
 (defun uniform-index (color)
   "Returns the index of the correspondent RGB color of an uniform

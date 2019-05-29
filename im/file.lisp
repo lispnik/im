@@ -1,42 +1,34 @@
-(defpackage #:im-file
-  (:use #:common-lisp
-        #:alexandria
-	#:cffi)
-  (:shadow #:open
-           #:close
-           #:with-open-file)
-  (:export #:open
-           #:open-as
-           #:new
-           #:close
-           #:call-with-open-file
-           #:with-open-file
-           #:handle
-           #:info
-           #:image-info
-           #:compression
-           #:remove-attribute
-           #:attribute
-           #:attribute-1
-           #:attribute-string
-           #:attributes
-           #:palette
-           #:read-image-info
-           #:write-image-info
-           #:read-image-data
-           #:write-image-data
-           #:load-image-frame
-           #:load-bitmap
-           #:load-image-region
-           #:load-bitmap-frame
-           #:save-image
-           #:image-load
-           #:image-load-bitmap
-           #:image-load-region
-           #:image-save)
-  (:import-from #:im-cffi #:im-file #:im-image))
-
 (in-package #:im-file)
+
+(export '(open
+          open-as
+          new
+          close
+          call-with-open-file
+          with-open-file
+          handle
+          info
+          image-info
+          compression
+          remove-attribute
+          attribute
+          attribute-1
+          attribute-string
+          attributes
+          palette
+          read-image-info
+          write-image-info
+          read-image-data
+          write-image-data
+          load-image-frame
+          load-bitmap
+          load-image-region
+          load-bitmap-frame
+          save-image
+          image-load
+          image-load-bitmap
+          image-load-region
+          image-save))
 
 (defun %as-filename (pathname-or-namestring)
   (namestring (translate-logical-pathname pathname-or-namestring)))

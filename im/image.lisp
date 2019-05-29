@@ -1,43 +1,40 @@
-(defpackage #:im-image
-  (:use #:common-lisp
-	#:cffi
-	#:serapeum)
-  (:shadow #:reshape)
-  (:export #:create
-           #:init
-           #:create-based
-           #:destroy
-           #:add-alpha
-           #:alpha
-           #:remove-alpha
-           #:reshape
-           #:copy
-           #:copy-data
-           #:copy-attributes
-           #:merge-attributes
-           #:copy-plane
-           #:duplicate
-           #:clone
-           #:clear
-           #:bitmap-p
-           #:palette
-           #:match-size-p
-           #:match-color-p
-           #:match-data-type-p
-           #:match-color-space-p
-           #:match-p
-           #:set-map
-           #:set-binary
-           #:set-gray
-           #:make-binary
-           #:make-gray
-           #:width
-           #:height
-	   #:size
-	   #:data
-	   #:data-type
-	   #:color-space
-	   #:depth))
+(in-package #:im-image)
+
+(export '(create
+          init
+          create-based
+          destroy
+          add-alpha
+          alpha
+          remove-alpha
+          reshape
+          copy
+          copy-data
+          copy-attributes
+          merge-attributes
+          copy-plane
+          duplicate
+          clone
+          clear
+          bitmap-p
+          palette
+          match-size-p
+          match-color-p
+          match-data-type-p
+          match-color-space-p
+          match-p
+          set-map
+          set-binary
+          set-gray
+          make-binary
+          make-gray
+          width
+          height
+          size
+          data
+          data-type
+          color-space
+          depth))
 
 (in-package #:im-image)
 
@@ -76,7 +73,7 @@ always are copied. HasAlpha is copied."
 non-NIL then also destroy the image data."
   (unless destroy-data-p
     (setf (cffi:foreign-slot-value
-           im-image
+           (pffft:pointer im-image)
            '(:struct im-cffi::im-image-struct) 'im-cffi::data)
           (cffi:null-pointer)))
   (tg:cancel-finalization im-image)
@@ -187,32 +184,32 @@ in-place. Color space is not changed. Data type must be IM_BYTE.")
 
 (defun width (im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::width))
+   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::width))
 
 (defun height (im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::height))
+   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::height))
 
 (defun size (im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::size))
+   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::size))
 
 (defun data (im-image plane)
   (assert (<= 0 plane (1- (depth im-image))))
   (cffi:mem-aref
    (cffi:foreign-slot-value
-    im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data)
+    (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::data)
    :pointer
    plane))
 
 (defun data-type (im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data-type))
+   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::data-type))
 
 (defun color-space (im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::color-space))
+   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::color-space))
 
 (defun depth (im-image)
   (cffi:foreign-slot-value
-   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::depth))
+   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::depth))
