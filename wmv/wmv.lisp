@@ -1,7 +1,7 @@
 (defpackage #:im-wmv
   (:use #:common-lisp
-	#:cffi
-	#:serapeum)
+	#:cffi)
+  (:import-from #:tecgraf-base #:defalias)
   (:export #:format-register-wmv))
 
 (in-package #:im-wmv)

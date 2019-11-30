@@ -1,7 +1,7 @@
 (defpackage #:im-jp2
   (:use #:common-lisp
-	#:cffi
-	#:serapeum)
+	#:cffi)
+  (:import-from #:tecgraf-base #:defalias)
   (:export #:format-register-jp2))
 
 (in-package #:im-jp2)

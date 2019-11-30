@@ -15,7 +15,8 @@
 
 #+linux
 (cffi:define-foreign-library lib-png
-  (:unix "libpng.so"))
+  (:unix (:or "libpng.so"
+              "libpng16.so.16")))
 
 #+linux
 (cffi:use-foreign-library lib-png)

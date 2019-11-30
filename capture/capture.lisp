@@ -1,7 +1,7 @@
 (defpackage #:im-capture
   (:use #:common-lisp
-	#:cffi
-	#:serapeum)
+	#:cffi)
+  (:import-from #:tecgraf-base #:defalias)
   (:export #:invalid-device-error
 	   #:no-device-error
 	   #:connection-error

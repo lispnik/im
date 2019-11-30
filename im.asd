@@ -19,4 +19,5 @@
   :depends-on (#:im-cffi
                #:cffi
                #:alexandria
-               #:split-sequence))
+               #:split-sequence
+               #:tecgraf-base))

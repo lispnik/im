@@ -1,7 +1,9 @@
 (defpackage #:im-process-cffi
   (:use #:common-lisp
         #:im-cffi)
-  (:export #:counter-aborted))
+  (:export #:counter-aborted)
+  (:import-from #:tecgraf-base
+                #:im-image))
 
 (in-package #:im-process-cffi)
 
@@ -265,7 +267,7 @@
   (kernel-size :int)
   (iter :int))
 
-(cffi:defcfun (%im-process-bin-morph-dilate "imProcessBinMorphOpen") counter-aborted
+(cffi:defcfun (%im-process-bin-morph-open "imProcessBinMorphOpen") counter-aborted
   (src-im-image im-image)
   (dst-im-image im-image)
   (kernel-size :int)
@@ -379,8 +381,3 @@
   (im-image im-image)
   (x-space :double)
   (y-space :double))
-
-(cffi:defcfun (%im-process-render-cosine "imProcessRenderCosine") counter-aborted
-  (im-image im-image)
-  (x-period :double)
-  (y-period :double))

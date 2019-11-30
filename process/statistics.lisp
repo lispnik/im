@@ -72,7 +72,7 @@ Signals COUNTER-ABORTED if the counter aborted."
 ;; imHistogramShift
 ;; imHisogramCount
 
-(cffi:define-c-struct-wrapper (stats im-process-cffi::im-stats-struct) ())
+(cffi:define-c-struct-wrapper (stats (:struct im-process-cffi::im-stats-struct)) ())
 
 (defun image-statistics (im-image)
   "Calculates the statistics about the image data. There is one STATS
@@ -87,8 +87,8 @@ Signals COUNTER-ABORTED if the counter aborted."
     (cffi:with-foreign-object
 	(stats-ptr '(:struct im-process-cffi::im-stats-struct) depth)
       (im-process-cffi::%im-calc-image-statistics im-image stats-ptr)
-      (loop with result = (make-array depth :element-type 'stats)
-	    and size = (cffi:foreign-type-size 'im-process-cffi::im-stats-struct)
+      (loop with result = (make-array depth)
+	    and size = (cffi:foreign-type-size '(:struct im-process-cffi::im-stats-struct))
 	    for i below depth
 	    for stats-i-ptr = (cffi:inc-pointer
 			       stats-ptr
@@ -118,7 +118,7 @@ Signals COUNTER-ABORTED if the counter aborted."
 	 (mode-ptr :int depth))
       (im-process-cffi::%im-calc-histo-image-statistics
        im-image median-ptr mode-ptr)
-      (loop with result = (make-array depth :element-type 'stats-extra)
+      (loop with result = (make-array depth)
 	    for i below depth
 	    for mode = (cffi:mem-aref mode-ptr :int i)
 	    do (setf (aref result i)
