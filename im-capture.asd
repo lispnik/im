@@ -6,5 +6,4 @@
 	       #:im
                #:cffi
 	       #:static-vectors
-               #:alexandria
-               #:serapeum))
+               #:alexandria))

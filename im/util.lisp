@@ -108,12 +108,12 @@ Compatible with CD library definition."
                 (color-mode-space color-mode2)))
 
 (defun color-mode-alpha-p (color-mode)
-  (zerop (lognand color-mode im-cffi::color-mode-config-alpha)))
+  (zerop (lognand color-mode (cffi:foreign-bitfield-value 'im-cffi::color-mode-config :color-mode-config-alpha))))
 
 (defun color-mode-packed-p (color-mode)
-  (zerop (lognand color-mode im-cffi::color-mode-config-packed)))
+  (zerop (lognand color-mode (cffi:foreign-bitfield-value 'im-cffi::color-mode-config :color-mode-config-packed))))
 
 (defun color-mode-top-down-p (color-mode)
-  (zerop (lognand color-mode im-cffi::color-mode-config-topdown)))
+  (zerop (lognand color-mode (cffi:foreign-bitfield-value 'im-cffi::color-mode-config :color-mode-config-topdown))))
 
 (defconstant +maximum-depth+ 5)

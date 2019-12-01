@@ -1,7 +1,7 @@
 (defpackage #:im-avi
   (:use #:common-lisp
-	#:cffi
-	#:serapeum)
+	#:cffi)
+  (:import-from #:tecgraf-base #:defalias)
   (:export #:format-register-avi))
 
 (in-package #:im-avi)
