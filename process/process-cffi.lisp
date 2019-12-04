@@ -23,11 +23,13 @@
 
 (define-condition counter-aborted () ())
 
+(defun counter-aborted-from-c (value)
+  (unless value
+    (signal 'counter-aborted)))
+
 (cffi:defctype counter-aborted
     (:wrapper :boolean
-     :from-c #'(lambda (value)
-                 (unless value
-                   (signal 'counter-aborted)))
+     :from-c counter-aborted-from-c
      :to-c nil))
 
 ;;; im_process_ana.h
