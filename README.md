@@ -11,6 +11,10 @@ processing. For more information, refer to:
    
 This project is unaffiliated with TecGraf.
 
+## Compatibility
+
+IM 3.14
+
 ## Documentation
 
 All exported symbols have docstrings, however you will need to refer
