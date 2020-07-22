@@ -203,18 +203,19 @@ sequence."
   (cffi:with-foreign-objects
       ((data-type-ptr 'im-cffi::data-type)
        (count-ptr :int))
-    (let* ((value-ptr (im-cffi::%im-file-get-attribute im-file attribute data-type-ptr count-ptr))
-           (data-type (cffi:mem-ref data-type-ptr 'im-cffi::data-type))
-           (count (cffi:mem-ref count-ptr :int)))
-          (let ((attributes (%attributes value-ptr count data-type)))
-            (values attributes data-type count)))))
+    (let* ((value-ptr (im-cffi::%im-file-get-attribute im-file attribute data-type-ptr count-ptr)))
+      (unless (cffi:null-pointer-p value-ptr)
+        (let* ((data-type (cffi:mem-ref data-type-ptr 'im-cffi::data-type))
+               (count (cffi:mem-ref count-ptr :int))
+               (attributes (%attributes value-ptr count data-type)))
+          (values attributes data-type count))))))
 
 (defun attribute-1 (im-file attribute)
   "Like ATTRIBUTE but returns the first value for ATTRIBUTE."
   (multiple-value-bind
         (attributes data-type count)
       (attribute im-file attribute)
-    (assert (> count 1))
+    (assert (> count 0))
     (values (elt attributes 0) data-type count)))
 
 (defun (setf attribute-string) (new-value im-file attribute)
