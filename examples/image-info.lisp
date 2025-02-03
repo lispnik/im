@@ -9,7 +9,7 @@
 ;;; Example usage:
 
 #+nil
-(loop for file in (directory #p"/usr/share/backgrounds/pop/*.jpg")
+(loop for file in (directory #p"/usr/share/backgrounds/")
    collect (image-info file))
 
 (defun image-metadata (file index)
