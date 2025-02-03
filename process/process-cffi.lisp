@@ -1,9 +1,7 @@
 (defpackage #:im-process-cffi
   (:use #:common-lisp
         #:im-cffi)
-  (:export #:counter-aborted)
-  (:import-from #:tecgraf-base
-                #:im-image))
+  (:export #:counter-aborted))
 
 (in-package #:im-process-cffi)
 

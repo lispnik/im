@@ -73,10 +73,9 @@ always are copied. HasAlpha is copied."
 non-NIL then also destroy the image data."
   (unless destroy-data-p
     (setf (cffi:foreign-slot-value
-           (pffft:pointer im-image)
+           im-image
            '(:struct im-cffi::im-image-struct) 'im-cffi::data)
           (cffi:null-pointer)))
-  (tg:cancel-finalization im-image)
   (im-cffi::%im-image-destroy im-image))
 
 (defalias add-alpha #'im-cffi::%im-image-add-alpha 
@@ -184,32 +183,32 @@ in-place. Color space is not changed. Data type must be IM_BYTE.")
 
 (defun width (im-image)
   (cffi:foreign-slot-value
-   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::width))
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::width))
 
 (defun height (im-image)
   (cffi:foreign-slot-value
-   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::height))
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::height))
 
 (defun size (im-image)
   (cffi:foreign-slot-value
-   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::size))
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::size))
 
 (defun data (im-image plane)
   (assert (<= 0 plane (1- (depth im-image))))
   (cffi:mem-aref
    (cffi:foreign-slot-value
-    (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::data)
+    im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data)
    :pointer
    plane))
 
 (defun data-type (im-image)
   (cffi:foreign-slot-value
-   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::data-type))
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::data-type))
 
 (defun color-space (im-image)
   (cffi:foreign-slot-value
-   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::color-space))
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::color-space))
 
 (defun depth (im-image)
   (cffi:foreign-slot-value
-   (pffft:pointer im-image) '(:struct im-cffi::im-image-struct) 'im-cffi::depth))
+   im-image '(:struct im-cffi::im-image-struct) 'im-cffi::depth))

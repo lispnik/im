@@ -66,7 +66,6 @@ create the file, no data is actually written."
 
 (defun close (im-file)
   "Closes the file."
-  (tg:cancel-finalization im-file)
   (im-cffi::%im-file-close im-file))
 
 (defun call-with-open-file (func im-file)

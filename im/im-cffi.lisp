@@ -1,10 +1,9 @@
 (defpackage #:im-cffi
   (:use #:common-lisp)
   (:export #:make-im-file
-           #:make-im-image)
-  (:import-from #:tecgraf-base
-                #:im-image
-                #:im-file))
+           #:make-im-image
+	   #:im-file
+	   #:im-image))
 
 (in-package #:im-cffi)
 
@@ -12,6 +11,9 @@
   (:unix "libim.so")
   (:windows "im.dll")
   (t (:default "im")))
+
+(cffi:defctype im-image :pointer)
+(cffi:defctype im-file :pointer)
 
 #+linux
 (cffi:define-foreign-library lib-png

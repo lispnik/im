@@ -4,5 +4,4 @@
   :components ((:file "im-cffi"))
   :depends-on (#:cffi
                #:trivial-features
-               #:tecgraf-base
-               #:pffft))
+               #:tecgraf-base))
