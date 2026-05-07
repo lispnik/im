@@ -8,6 +8,7 @@
 (in-package #:im-cffi)
 
 (cffi:define-foreign-library lib-im
+  (:darwin "libim.dylib")
   (:unix "libim.so")
   (:windows "im.dll")
   (t (:default "im")))
@@ -15,13 +16,25 @@
 (cffi:defctype im-image :pointer)
 (cffi:defctype im-file :pointer)
 
-#+linux
-(cffi:define-foreign-library lib-png
-  (:unix (:or "libpng.so"
-              "libpng16.so.16")))
+;; (Historical: libim used to require an explicit libpng preload here
+;; because the IM build added libpng's include path but never -lpng,
+;; relying on -undefined dynamic_lookup to leave the symbols dangling.
+;; That has been fixed in im/src/config.mak so libim.dylib carries its
+;; own libpng dependency. No preload needed.)
 
-#+linux
-(cffi:use-foreign-library lib-png)
+;; macOS dylibs use absolute install_names but CFFI still needs to find
+;; them by basename when the user has not set DYLD_LIBRARY_PATH. Push
+;; the canonical IM lib build directory into the search list when we
+;; can guess it; users with a different layout can pushnew their own
+;; path before loading this system.
+#+darwin
+(let ((p #P"/Users/mkennedy/tecgraf/im/lib/MacOS264/"))
+  (when (probe-file p)
+    (pushnew p cffi:*foreign-library-directories* :test #'equal)))
+#+darwin
+(let ((p #P"/opt/homebrew/lib/"))
+  (when (probe-file p)
+    (pushnew p cffi:*foreign-library-directories* :test #'equal)))
 
 (cffi:use-foreign-library lib-im)
 
@@ -623,7 +636,7 @@
 (cffi:defcfun (%im-palette-blue "imPaletteBlue") palette)
 (cffi:defcfun (%im-palette-yellow "imPaletteYellow") palette)
 (cffi:defcfun (%im-palette-magenta "imPaletteMagenta") palette)
-(cffi:defcfun (%im-palette-cian "imPaletteCian") palette)
+(cffi:defcfun (%im-palette-cyan "imPaletteCyan") palette)
 (cffi:defcfun (%im-palette-rainbow "imPaletteRainbow") palette)
 (cffi:defcfun (%im-palette-hues "imPaletteHues") palette)
 (cffi:defcfun (%im-palette-blue-ice "imPaletteBlueIce") palette)
@@ -709,7 +722,7 @@
   (palette palette)
   (palette-count :int))
 
-(cffi:defcfun (%im-convert-rgb-to-map "imConvertRGBToMap") :int
+(cffi:defcfun (%im-convert-rgb-to-map "imConvertRGB2Map") :int
   (width :int)
   (height :int)
   (red :pointer)
@@ -719,7 +732,7 @@
   (palette :pointer)
   (palette-count :pointer))
 
-(cffi:defcfun (%im-convert-rgb-to-map-counter "imConvertRGBToMapCounter") :int
+(cffi:defcfun (%im-convert-rgb-to-map-counter "imConvertRGB2MapCounter") :int
   (width :int)
   (height :int)
   (red :pointer)
@@ -747,9 +760,142 @@
 (cffi:defcfun (%im-kernel-circular-mean-5x5 "imKernelCircularMean5x5") im-image)
 (cffi:defcfun (%im-kernel-mean-7x7 "imKernelMean7x7") im-image)
 (cffi:defcfun (%im-kernel-circular-mean-7x7 "imKernelCircularMean7x7") im-image)
-(cffi:defcfun (%im-kernel-guassian-3x3 "imKernelGausian3x3") im-image)
-(cffi:defcfun (%im-kernel-guassian-5x5 "imKernelGausian5x5") im-image)
+(cffi:defcfun (%im-kernel-gaussian-3x3 "imKernelGaussian3x3") im-image)
+(cffi:defcfun (%im-kernel-gaussian-5x5 "imKernelGaussian5x5") im-image)
 (cffi:defcfun (%im-kernel-barlett-5x5 "imKernelBarlett5x5") im-image)
 (cffi:defcfun (%im-kernel-top-hat-5x5 "imKernelTopHat5x5") im-image)
 (cffi:defcfun (%im-kernel-top-hat-7x7 "imKernelTopHat7x7") im-image)
 (cffi:defcfun (%im-kernel-enhance "imKernelEnhance") im-image)
+
+;;; im_counter.h
+
+(cffi:defctype counter-callback :pointer)
+
+(cffi:defcfun (%im-counter-set-callback "imCounterSetCallback") counter-callback
+  (user-data :pointer)
+  (counter-func counter-callback))
+
+(cffi:defcfun (%im-counter-has-callback "imCounterHasCallback") :boolean)
+
+(cffi:defcfun (%im-counter-begin "imCounterBegin") :int
+  (title :string))
+
+(cffi:defcfun (%im-counter-end "imCounterEnd") :void
+  (counter :int))
+
+(cffi:defcfun (%im-counter-inc "imCounterInc") :int
+  (counter :int))
+
+(cffi:defcfun (%im-counter-inc-to "imCounterIncTo") :int
+  (counter :int)
+  (count :int))
+
+(cffi:defcfun (%im-counter-total "imCounterTotal") :void
+  (counter :int)
+  (total :int)
+  (message :string))
+
+(cffi:defcfun (%im-counter-get-user-data "imCounterGetUserData") :pointer
+  (counter :int))
+
+(cffi:defcfun (%im-counter-set-user-data "imCounterSetUserData") :void
+  (counter :int)
+  (userdata :pointer))
+
+;;; im_binfile.h
+
+(cffi:defctype im-bin-file :pointer)
+
+(cffi:defcenum bin-file-module
+  (:bin-file-module-rawfile     0)
+  (:bin-file-module-stream      1)
+  (:bin-file-module-memfile     2)
+  (:bin-file-module-subfile     3)
+  (:bin-file-module-filehandle  4)
+  (:bin-file-module-iocustom-0  5))
+
+;; The C API uses constants IM_LITTLEENDIAN=0 and IM_BIGENDIAN=1
+;; (defined in im_util.h via #defines).
+(defparameter *little-endian* 0)
+(defparameter *big-endian*    1)
+
+(cffi:defcstruct im-bin-memory-file-name
+  (buffer (:pointer :unsigned-char))
+  (size :int)
+  (reallocate :float))
+
+(cffi:defcfun (%im-bin-file-open "imBinFileOpen") im-bin-file
+  (filename :string))
+
+(cffi:defcfun (%im-bin-file-new "imBinFileNew") im-bin-file
+  (filename :string))
+
+(cffi:defcfun (%im-bin-file-close "imBinFileClose") :void
+  (bin-file im-bin-file))
+
+(cffi:defcfun (%im-bin-file-error "imBinFileError") :int
+  (bin-file im-bin-file))
+
+(cffi:defcfun (%im-bin-file-size "imBinFileSize") :unsigned-long
+  (bin-file im-bin-file))
+
+(cffi:defcfun (%im-bin-file-byte-order "imBinFileByteOrder") :int
+  (bin-file im-bin-file)
+  (byte-order :int))
+
+(cffi:defcfun (%im-bin-file-read "imBinFileRead") :unsigned-long
+  (bin-file im-bin-file)
+  (values :pointer)
+  (count :unsigned-long)
+  (size-of :int))
+
+(cffi:defcfun (%im-bin-file-write "imBinFileWrite") :unsigned-long
+  (bin-file im-bin-file)
+  (values :pointer)
+  (count :unsigned-long)
+  (size-of :int))
+
+(cffi:defcfun (%im-bin-file-printf "imBinFilePrintf") :unsigned-long
+  (bin-file im-bin-file)
+  (format :string)
+  &rest)
+
+(cffi:defcfun (%im-bin-file-read-line "imBinFileReadLine") :int
+  (handle im-bin-file)
+  (buffer :pointer)
+  (size-ptr (:pointer :int)))
+
+(cffi:defcfun (%im-bin-file-skip-line "imBinFileSkipLine") :int
+  (handle im-bin-file))
+
+(cffi:defcfun (%im-bin-file-read-integer "imBinFileReadInteger") :int
+  (handle im-bin-file)
+  (value (:pointer :int)))
+
+(cffi:defcfun (%im-bin-file-read-real "imBinFileReadReal") :int
+  (handle im-bin-file)
+  (value (:pointer :double)))
+
+(cffi:defcfun (%im-bin-file-seek-to "imBinFileSeekTo") :void
+  (bin-file im-bin-file)
+  (offset :unsigned-long))
+
+(cffi:defcfun (%im-bin-file-seek-offset "imBinFileSeekOffset") :void
+  (bin-file im-bin-file)
+  (offset :long))
+
+(cffi:defcfun (%im-bin-file-seek-from "imBinFileSeekFrom") :void
+  (bin-file im-bin-file)
+  (offset :long))
+
+(cffi:defcfun (%im-bin-file-tell "imBinFileTell") :unsigned-long
+  (bin-file im-bin-file))
+
+(cffi:defcfun (%im-bin-file-end-of-file "imBinFileEndOfFile") :int
+  (bin-file im-bin-file))
+
+(cffi:defcfun (%im-bin-file-set-current-module "imBinFileSetCurrentModule") :int
+  (module bin-file-module))
+
+(cffi:defcfun (%im-bin-memory-release "imBinMemoryRelease") :void
+  (buffer (:pointer :unsigned-char)))

@@ -4,9 +4,10 @@
 (in-package #:im-jp2-cffi)
 
 (cffi:define-foreign-library lib-im-jp2
+  (:darwin "libim_jp2.dylib")
   (:unix "libim_jp2.so")
   (:windows "im_jp2.dll")
-  (t (:default "im_jp")))
+  (t (:default "im_jp2")))
 
 (cffi:use-foreign-library lib-im-jp2)
 

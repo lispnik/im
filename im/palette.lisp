@@ -121,10 +121,8 @@ The colors are arranged from black to pure red.")
 (%define-palette magenta "Creates a palette of a gradient of magenta colors. 
 The colors are arranged from black to pure magenta.")
 
-(%define-palette cian "Creates a palette of a gradient of cian colors. 
-The colors are arranged from black to pure cian.")
-
-(setf (symbol-function 'cyan) #'cian)
+(%define-palette cyan "Creates a palette of a gradient of cyan colors.
+The colors are arranged from black to pure cyan.")
 
 (%define-palette rainbow "Creates a palette of rainbow colors. 
 The colors are arranged in the light wave length spectrum

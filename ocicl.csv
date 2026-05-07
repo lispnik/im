@@ -1,0 +1,15 @@
+alexandria, ghcr.io/ocicl/alexandria@sha256:e433c2e076ed3bcf8641b97b00192680db2201d305efac9293539dee88c7fbf7, alexandria-20240503-8514d8e/alexandria.asd
+babel, ghcr.io/ocicl/babel@sha256:9d9fcde71acc2b5c39572de4f11756a08c1d8801caa86c581b85dabaa35928b3, babel-20250905-4eaf3f2/babel.asd
+babel-streams, ghcr.io/ocicl/babel@sha256:9d9fcde71acc2b5c39572de4f11756a08c1d8801caa86c581b85dabaa35928b3, babel-20250905-4eaf3f2/babel-streams.asd
+babel-tests, ghcr.io/ocicl/babel@sha256:9d9fcde71acc2b5c39572de4f11756a08c1d8801caa86c581b85dabaa35928b3, babel-20250905-4eaf3f2/babel-tests.asd
+cffi, ghcr.io/ocicl/cffi@sha256:d415b2cde8431fb3e7d5fc358fccb4aaa0a028dd8819e14608b4d245d0bff9e4, cffi-20250822-dad3520/cffi.asd
+cffi-examples, ghcr.io/ocicl/cffi@sha256:d415b2cde8431fb3e7d5fc358fccb4aaa0a028dd8819e14608b4d245d0bff9e4, cffi-20250822-dad3520/cffi-examples.asd
+cffi-grovel, ghcr.io/ocicl/cffi@sha256:d415b2cde8431fb3e7d5fc358fccb4aaa0a028dd8819e14608b4d245d0bff9e4, cffi-20250822-dad3520/cffi-grovel.asd
+cffi-libffi, ghcr.io/ocicl/cffi@sha256:d415b2cde8431fb3e7d5fc358fccb4aaa0a028dd8819e14608b4d245d0bff9e4, cffi-20250822-dad3520/cffi-libffi.asd
+cffi-tests, ghcr.io/ocicl/cffi@sha256:d415b2cde8431fb3e7d5fc358fccb4aaa0a028dd8819e14608b4d245d0bff9e4, cffi-20250822-dad3520/cffi-tests.asd
+cffi-toolchain, ghcr.io/ocicl/cffi@sha256:d415b2cde8431fb3e7d5fc358fccb4aaa0a028dd8819e14608b4d245d0bff9e4, cffi-20250822-dad3520/cffi-toolchain.asd
+cffi-uffi-compat, ghcr.io/ocicl/cffi@sha256:d415b2cde8431fb3e7d5fc358fccb4aaa0a028dd8819e14608b4d245d0bff9e4, cffi-20250822-dad3520/cffi-uffi-compat.asd
+split-sequence, ghcr.io/ocicl/split-sequence@sha256:3a37662eedd99c42995587b9d443c4631f25c4c523091bcca31a27b880585b8e, split-sequence-2.0.1/split-sequence.asd
+trivial-features, ghcr.io/ocicl/trivial-features@sha256:e278e24d39060fc7d3715531b16ddd9ab7f93f22ade53e436c0b86dbae3aa065, trivial-features-1.0/trivial-features.asd
+trivial-features-tests, ghcr.io/ocicl/trivial-features@sha256:e278e24d39060fc7d3715531b16ddd9ab7f93f22ade53e436c0b86dbae3aa065, trivial-features-1.0/trivial-features-tests.asd
+uffi, ghcr.io/ocicl/cffi@sha256:d415b2cde8431fb3e7d5fc358fccb4aaa0a028dd8819e14608b4d245d0bff9e4, cffi-20250822-dad3520/uffi-compat/uffi.asd

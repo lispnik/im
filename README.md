@@ -23,15 +23,50 @@ for concepts and further details.
 
 ## Coverage
 
-IM is defined in four parts. The Lisp binding will eventually cover
-all four, however only the following are mostly implemented:
+IM is defined in four parts:
 
 - [x] Representation
 - [x] Storage¹
 - [x] Capture
-- [ ] Processing
+- [x] Processing²
 
 ¹ except memory file support
+² CFFI bindings cover ~90% of the public im_process / im_analyze /
+im_calc surface; high-level Lisp wrappers are organised across
+the following packages:
+
+- `im-arithmetic` — unary/binary/bitwise/blend/tone-gamut ops
+- `im-convolve`   — Convolve, MeanConvolve, MedianConvolve, Sobel,
+                    Prewitt, Canny, Unsharp, etc.
+- `im-threshold`  — Threshold, Otsu, hysteresis, local-max, etc.
+- `im-color`      — ReplaceColor, FixBGR, PseudoColor, HSI split/merge,
+                    quantize, histogram equalize/expand
+- `im-morph`      — gray and binary morphology (erode/dilate/open/close,
+                    top-hat, well, gradient, thinning)
+- `im-geometric`  — Resize, Reduce, Rotate, Crop, AddMargins, Mirror,
+                    Flip, Radial / LensDistort
+- `im-render`     — Constant, Gaussian, Chessboard, Grid, AddNoise...
+- `im-analyze`    — FindRegions + MeasureArea / Perimeter / Centroid
+                    / Holes, FillHoles, RemoveByArea
+- `im-transform`  — FFT / IFFT / DistanceTransform / HoughLines /
+                    AutoCorrelation / CrossCorrelation
+- `im-calc`       — RMSError, SNR, CountColors, ImageStatistics, etc.
+
+## macOS notes
+
+The `:darwin` clauses in the foreign-library declarations look up
+`libim.dylib` and friends. After building the IM dylibs locally,
+their install_names embed `@rpath/libim.dylib`, which CFFI cannot
+resolve from SBCL. Rewrite them to absolute paths once per build:
+
+```
+/Users/.../tecgraf/im/lib/MacOS264/fix-install-names.sh
+```
+
+The CFFI bindings also push `/Users/<you>/tecgraf/im/lib/MacOS264/`
+and `/opt/homebrew/lib/` onto `cffi:*foreign-library-directories*`
+when those directories exist; users with a different layout can
+`pushnew` their own path before loading the system.
 
 ## CFFI deviations from the C API
 
