@@ -133,8 +133,11 @@ order (starting from purple).")
 (%define-palette blue-ice "Creates a palette of a gradient of blue colors.
 The colors are arranged from pure blue to white.")
 
-(%define-palette hot-iron "Creates a palette of a gradient from black to 
+(%define-palette hot-iron "Creates a palette of a gradient from black to
 white passing through red and orange.")
+
+(%define-palette black-body "Creates a palette modeling black-body radiation
+(thermal colour temperature: black -> red -> orange -> yellow -> white).")
 
 (%define-palette high-contrast "Creates a palette with high contrast colors.")
 

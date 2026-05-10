@@ -23,7 +23,9 @@
            #:canny
            #:unsharp
            #:sharp
-           #:sharp-kernel))
+           #:sharp-kernel
+           #:stddev-to-kernel-size
+           #:kernel-size-to-stddev))
 
 (in-package #:im-convolve)
 
@@ -141,3 +143,16 @@ the per-pixel maximum response."
   (im-process-cffi::%im-process-sharp-kernel src-image kernel dst-image
                                              (coerce amount 'double-float)
                                              (coerce threshold 'double-float)))
+
+;;; Gaussian sigma <-> kernel-size helpers ----------------------------
+
+(defun stddev-to-kernel-size (stddev)
+  "Convert a Gaussian standard deviation to a kernel side length
+suitable for the convolve helpers. Returns an odd positive integer."
+  (im-process-cffi::%im-gaussian-stddev-to-kernel-size
+   (coerce stddev 'double-float)))
+
+(defun kernel-size-to-stddev (kernel-size)
+  "Inverse of STDDEV-TO-KERNEL-SIZE: return the standard deviation
+that maps to a given odd kernel side length."
+  (im-process-cffi::%im-gaussian-kernel-size-to-stddev kernel-size))

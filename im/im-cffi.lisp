@@ -641,6 +641,7 @@
 (cffi:defcfun (%im-palette-hues "imPaletteHues") palette)
 (cffi:defcfun (%im-palette-blue-ice "imPaletteBlueIce") palette)
 (cffi:defcfun (%im-palette-hot-iron "imPaletteHotIron") palette)
+(cffi:defcfun (%im-palette-black-body "imPaletteBlackBody") palette)
 (cffi:defcfun (%im-palette-high-contrast "imPaletteHighContrast") palette)
 (cffi:defcfun (%im-palette-linear "imPaletteLinear") palette)
 (cffi:defcfun (%im-palette-uniform "imPaletteUniform") palette)

@@ -140,6 +140,12 @@
 (cffi:defcfun (%im-process-openmp-set-num-threads "imProcessOpenMPSetNumThreads") :int
   (count :int))
 
+(cffi:defcfun (%im-gaussian-stddev-to-kernel-size "imGaussianStdDev2KernelSize") :int
+  (stddev :double))
+
+(cffi:defcfun (%im-gaussian-kernel-size-to-stddev "imGaussianKernelSize2StdDev") :double
+  (kernel-size :int))
+
 ;;; im_process_loc.h
 
 (cffi:defcfun (%im-process-calc-rotate-size "imProcessCalcRotateSize") :void
