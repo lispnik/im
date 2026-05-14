@@ -21,6 +21,20 @@
 
 (cffi:use-foreign-library lib-im-process)
 
+;; FFT/IFFT/Auto- and CrossCorrelation/AutoCovariance live in a
+;; separate libim_fftw3 add-on. Try to load it; ignore the error if
+;; absent (calls to those functions will then fail with
+;; UNDEFINED-ALIEN-FUNCTION-ERROR).
+(cffi:define-foreign-library lib-im-fftw3
+  (:darwin "libim_fftw3.dylib")
+  (:unix "libim_fftw3.so")
+  (:windows "im_fftw3.dll")
+  (t (:default "im_fftw3")))
+
+(handler-case
+    (cffi:use-foreign-library lib-im-fftw3)
+  (cffi:load-foreign-library-error () nil))
+
 (define-condition counter-aborted () ())
 
 (defun counter-aborted-from-c (value)

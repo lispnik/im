@@ -60,7 +60,7 @@ their install_names embed `@rpath/libim.dylib`, which CFFI cannot
 resolve from SBCL. Rewrite them to absolute paths once per build:
 
 ```
-/Users/.../tecgraf/im/lib/MacOS264/fix-install-names.sh
+cd /path/to/tecgraf/im && ./fix-install-names.sh
 ```
 
 The CFFI bindings also push `/Users/<you>/tecgraf/im/lib/MacOS264/`

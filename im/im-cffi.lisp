@@ -27,12 +27,15 @@
 ;; the canonical IM lib build directory into the search list when we
 ;; can guess it; users with a different layout can pushnew their own
 ;; path before loading this system.
+;; Source edits and builds happen in the git mirror at im-git; the
+;; legacy SVN checkout at /tecgraf/im is read-only. The CMake build
+;; outputs to build/lib/ (no per-OS subdir); the older tecmake build
+;; output to lib/MacOS264/, still listed as a fallback.
 #+darwin
-(let ((p #P"/Users/mkennedy/tecgraf/im/lib/MacOS264/"))
-  (when (probe-file p)
-    (pushnew p cffi:*foreign-library-directories* :test #'equal)))
-#+darwin
-(let ((p #P"/opt/homebrew/lib/"))
+(dolist (p '(#P"/Users/mkennedy/tecgraf/im-git/build/lib/"
+             #P"/Users/mkennedy/tecgraf/im-git/lib/MacOS264/"
+             #P"/Users/mkennedy/tecgraf/im/lib/MacOS264/"
+             #P"/opt/homebrew/lib/"))
   (when (probe-file p)
     (pushnew p cffi:*foreign-library-directories* :test #'equal)))
 
@@ -476,7 +479,7 @@
   (im-image im-image)
   (error-ptr :pointer))
 
-(cffi:defcfun (%im-file-save-image "imFileSaveImage") :int
+(cffi:defcfun (%im-file-save-image "imFileSaveImage") error-code
   (im-file im-file)
   (im-image im-image))
 
@@ -502,7 +505,7 @@
   (width :int)
   (height :int))
 
-(cffi:defcfun (%im-file-image-save "imFileImageSave") :int
+(cffi:defcfun (%im-file-image-save "imFileImageSave") error-code
   (filename :string)
   (format :string)
   (im-image im-image))
