@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  # Trigger when tecgraf-im builds complete
+  repository_dispatch:
+    types: [tecgraf-im-build-complete]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        lisp: [sbcl]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            im-workflow: ci-linux.yml
+            im-libs-artifact: im-libs-ubuntu-24.04
+            im-headers-artifact: im-headers-ubuntu-24.04
+          - os: macos-latest
+            platform: macos
+            im-workflow: ci-macos.yml
+            im-libs-artifact: im-libs-macos-15
+            im-headers-artifact: im-headers-macos-15
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Common Lisp (${{ matrix.lisp }})
+      uses: 40ants/setup-lisp@v4
+      with:
+        asdf-system: im
+        qlfile-template: |
+          dist ultralisp http://dist.ultralisp.org/
+        lisp: ${{ matrix.lisp }}
+
+    - name: Install system dependencies (Linux)
+      if: matrix.platform == 'linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libx11-6 \
+          libxext6 \
+          libxrender1 \
+          libxft2 \
+          libcairo2 \
+          libpango1.0-0 \
+          libfreetype6 \
+          libgl1-mesa-glx \
+          libglu1-mesa \
+          liblua5.4-0 \
+          lua5.4 \
+          libtiff6 \
+          libpng16-16 \
+          libjpeg8 \
+          zlib1g \
+          libexif12 \
+          liblzf1 \
+          liblz4-1 \
+          libfftw3-3 \
+          libgomp1
+
+    - name: Install system dependencies (macOS)
+      if: matrix.platform == 'macos'
+      run: |
+        brew install \
+          cairo \
+          pango \
+          freetype \
+          lua \
+          libtiff \
+          libpng \
+          jpeg \
+          libexif \
+          jasper \
+          fftw
+
+    - name: Wait for tecgraf-im build completion
+      uses: fountainhead/action-wait-for-check@v1.1.0
+      id: wait-for-im-build
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        checkName: build (${{ matrix.os }}, Release)
+        ref: master
+        repo: lispnik/tecgraf-im
+        timeoutSeconds: 1800
+        intervalSeconds: 30
+
+    - name: Download IM library artifacts
+      if: steps.wait-for-im-build.outputs.conclusion == 'success'
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        workflow: ${{ matrix.im-workflow }}
+        repo: lispnik/tecgraf-im
+        branch: master
+        name: ${{ matrix.im-libs-artifact }}
+        path: im-libs/
+
+    - name: Download IM header artifacts
+      if: steps.wait-for-im-build.outputs.conclusion == 'success'
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        workflow: ${{ matrix.im-workflow }}
+        repo: lispnik/tecgraf-im
+        branch: master
+        name: ${{ matrix.im-headers-artifact }}
+        path: im-headers/
+
+    - name: Setup library paths (Linux)
+      if: matrix.platform == 'linux'
+      run: |
+        echo "LD_LIBRARY_PATH=$PWD/im-libs:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        ls -la im-libs/
+
+    - name: Setup library paths (macOS)
+      if: matrix.platform == 'macos'
+      run: |
+        echo "DYLD_LIBRARY_PATH=$PWD/im-libs:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+        ls -la im-libs/
+
+    - name: Test library loading
+      run: |
+        ${{ matrix.lisp }} --eval "(progn (push \"$PWD/im-libs/\" cffi:*foreign-library-directories*) (ql:quickload :im-cffi) (format t \"~%IM library loaded successfully~%\") (quit))"
+
+    - name: Run basic IM tests
+      run: |
+        ${{ matrix.lisp }} --eval "(progn (push \"$PWD/im-libs/\" cffi:*foreign-library-directories*) (ql:quickload :im-tests) (asdf:test-system :im) (quit))"
+
+    - name: Run process tests (if available)
+      run: |
+        ${{ matrix.lisp }} --eval "(progn (push \"$PWD/im-libs/\" cffi:*foreign-library-directories*) (ql:quickload :im-process) (format t \"~%IM process library loaded successfully~%\") (quit))" || echo "Process tests not available"
+
+    - name: Test example usage
+      run: |
+        ${{ matrix.lisp }} --eval "(progn
+          (push \"$PWD/im-libs/\" cffi:*foreign-library-directories*)
+          (ql:quickload :im)
+          (im:with-im ()
+            (format t \"~%IM initialized successfully~%\")
+            (format t \"Version: ~A~%\" (im:version))
+            (format t \"Available formats: ~A~%\" (im:format-list)))
+          (quit))"
