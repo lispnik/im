@@ -20,7 +20,13 @@
                (:file "render")
                (:file "analyze")
                (:file "transform")
-               (:file "calc"))
+               (:file "calc")
+               (:module "examples"
+                :components ((:file "package")
+                            (:file "info")
+                            ;; (:file "processing")  ; TODO: Fix API calls
+                            ;; (:file "analysis")    ; TODO: Fix API calls
+                            )))
   :depends-on (#:fiveam
                #:im
                #:im-process)
