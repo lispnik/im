@@ -236,6 +236,18 @@ jobs:
           --eval '(asdf:load-system :im-cffi)' \
           --eval '(format t "~%IM library loaded successfully~%")'
 
+    - name: Report IM version and formats
+      run: |
+        sbcl --non-interactive \
+          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
+          --eval '(asdf:load-system :cffi)' \
+          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
+          --eval '(asdf:load-system :im)' \
+          --eval '(progn
+                    (format t "~%Version: ~A~%" (im:version))
+                    (format t "Available formats: ~A~%" (im:format-list)))'
+
     - name: Run the test suite
       run: |
         # :im-tests, not :im - im.asd defines no test-op, so testing :im
@@ -257,15 +269,3 @@ jobs:
           --eval '(asdf:load-system :im-process)' \
           --eval '(format t "~%IM process library loaded successfully~%")'
 
-    - name: Test example usage
-      run: |
-        sbcl --non-interactive \
-          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
-          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
-          --eval '(asdf:load-system :cffi)' \
-          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
-          --eval '(asdf:load-system :im)' \
-          --eval '(im:with-im ()
-                    (format t "~%IM initialized successfully~%")
-                    (format t "Version: ~A~%" (im:version))
-                    (format t "Available formats: ~A~%" (im:format-list)))'
