@@ -12,33 +12,52 @@ on:
 jobs:
   test:
     strategy:
+      # Without this, one platform failing cancels the others and hides
+      # whether the failure is platform-specific.
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        lisp: [sbcl]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - os: ubuntu-latest
             platform: linux
             im-workflow: ci-linux.yml
             im-libs-artifact: im-libs-ubuntu-24.04
             im-headers-artifact: im-headers-ubuntu-24.04
+            im-check-name: Build IM (Ubuntu 24.04)
           - os: macos-latest
             platform: macos
             im-workflow: ci-macos.yml
             im-libs-artifact: im-libs-macos-15
             im-headers-artifact: im-headers-macos-15
+            im-check-name: Build IM (macos-15)
+          - os: windows-latest
+            platform: windows
+            im-workflow: ci-windows.yml
+            im-libs-artifact: im-libs-windows-2022
+            im-headers-artifact: im-headers-windows-2022
+            im-check-name: Build IM (windows-2022)
 
     runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        # Git Bash on the Windows runner, so the one set of shell steps
+        # below works on all three platforms.
+        shell: bash
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Common Lisp (${{ matrix.lisp }})
+    - name: Install Common Lisp (sbcl-bin)
       uses: 40ants/setup-lisp@v4
       with:
         asdf-system: im
         qlfile-template: |
           dist ultralisp http://dist.ultralisp.org/
-        lisp: ${{ matrix.lisp }}
+        # sbcl-bin, not sbcl: per the setup-lisp support matrix, plain
+        # "sbcl" is only supported on Linux, while "sbcl-bin" is the one
+        # implementation supported on Linux, macOS and Windows alike.
+        lisp: sbcl-bin
 
     - name: Install system dependencies (Linux)
       if: matrix.platform == 'linux'
@@ -81,12 +100,20 @@ jobs:
           jasper \
           fftw
 
+    # No "Install system dependencies (Windows)" counterpart: upstream
+    # builds Windows against vcpkg x64-windows, whose DLLs (tiff.dll,
+    # jpeg62.dll, ...) do not match what choco or MSYS2 would install, so
+    # the im-libs artifact has to carry them. The listing in "Setup
+    # library paths (Windows)" is what shows whether it does.
     - name: Wait for tecgraf-im build completion
       uses: fountainhead/action-wait-for-check@v1.1.0
       id: wait-for-im-build
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        checkName: build (${{ matrix.os }}, Release)
+        # Must match the upstream job name exactly. The jobs there are
+        # named "Build IM (<runner>)", where <runner> is the image the
+        # artifact was built on - not this workflow's runner label.
+        checkName: ${{ matrix.im-check-name }}
         ref: master
         repo: lispnik/tecgraf-im
         timeoutSeconds: 1800
@@ -114,34 +141,52 @@ jobs:
         name: ${{ matrix.im-headers-artifact }}
         path: im-headers/
 
+    # IM_LIBS_DIR is what the Lisp steps below push onto
+    # cffi:*foreign-library-directories*, so each platform sets it in the
+    # form its own SBCL understands.
     - name: Setup library paths (Linux)
       if: matrix.platform == 'linux'
       run: |
         echo "LD_LIBRARY_PATH=$PWD/im-libs:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "IM_LIBS_DIR=$PWD/im-libs" >> $GITHUB_ENV
         ls -la im-libs/
 
     - name: Setup library paths (macOS)
       if: matrix.platform == 'macos'
       run: |
         echo "DYLD_LIBRARY_PATH=$PWD/im-libs:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "IM_LIBS_DIR=$PWD/im-libs" >> $GITHUB_ENV
+        ls -la im-libs/
+
+    - name: Setup library paths (Windows)
+      if: matrix.platform == 'windows'
+      run: |
+        # SBCL here is a native Windows binary, so it cannot use the
+        # /d/a/... MSYS path that $PWD holds under Git Bash. cygpath -m
+        # gives a Windows path with forward slashes, which SBCL accepts
+        # and which needs no backslash escaping inside a Lisp string.
+        echo "IM_LIBS_DIR=$(cygpath -m "$PWD")/im-libs" >> $GITHUB_ENV
+        # Windows resolves dependent DLLs through PATH, and the IM DLLs
+        # load each other, so the directory has to be on it.
+        cygpath -w "$PWD/im-libs" >> $GITHUB_PATH
         ls -la im-libs/
 
     - name: Test library loading
       run: |
-        ${{ matrix.lisp }} --eval "(progn (push \"$PWD/im-libs/\" cffi:*foreign-library-directories*) (ql:quickload :im-cffi) (format t \"~%IM library loaded successfully~%\") (quit))"
+        sbcl --eval "(progn (push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*) (ql:quickload :im-cffi) (format t \"~%IM library loaded successfully~%\") (quit))"
 
     - name: Run basic IM tests
       run: |
-        ${{ matrix.lisp }} --eval "(progn (push \"$PWD/im-libs/\" cffi:*foreign-library-directories*) (ql:quickload :im-tests) (asdf:test-system :im) (quit))"
+        sbcl --eval "(progn (push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*) (ql:quickload :im-tests) (asdf:test-system :im) (quit))"
 
     - name: Run process tests (if available)
       run: |
-        ${{ matrix.lisp }} --eval "(progn (push \"$PWD/im-libs/\" cffi:*foreign-library-directories*) (ql:quickload :im-process) (format t \"~%IM process library loaded successfully~%\") (quit))" || echo "Process tests not available"
+        sbcl --eval "(progn (push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*) (ql:quickload :im-process) (format t \"~%IM process library loaded successfully~%\") (quit))" || echo "Process tests not available"
 
     - name: Test example usage
       run: |
-        ${{ matrix.lisp }} --eval "(progn
-          (push \"$PWD/im-libs/\" cffi:*foreign-library-directories*)
+        sbcl --eval "(progn
+          (push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)
           (ql:quickload :im)
           (im:with-im ()
             (format t \"~%IM initialized successfully~%\")
