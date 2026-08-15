@@ -73,9 +73,9 @@ jobs:
           libxrender1 \
           libxft2 \
           libcairo2 \
-          libpango1.0-0 \
+          libpango-1.0-0 \
           libfreetype6 \
-          libgl1-mesa-glx \
+          libgl1 \
           libglu1-mesa \
           liblua5.4-0 \
           lua5.4 \
@@ -86,7 +86,7 @@ jobs:
           libexif12 \
           liblzf1 \
           liblz4-1 \
-          libfftw3-3 \
+          libfftw3-double3 \
           libgomp1
 
     - name: Install system dependencies (macOS)
@@ -151,7 +151,11 @@ jobs:
         # artifact was built on - not this workflow's runner label.
         checkName: ${{ matrix.im-check-name }}
         ref: master
-        repo: lispnik/tecgraf-im
+        # This action takes owner and repo separately; a combined
+        # "lispnik/tecgraf-im" here is resolved as
+        # lispnik/lispnik/tecgraf-im and 404s.
+        owner: lispnik
+        repo: tecgraf-im
         timeoutSeconds: 1800
         intervalSeconds: 30
 
@@ -184,6 +188,11 @@ jobs:
     # the end of this step is what shows whether it does.
     - name: Set up library and source paths
       run: |
+        if [ ! -d im-libs ]; then
+          echo "::error::IM libraries unavailable. The upstream check '${{ matrix.im-check-name }}' on lispnik/tecgraf-im@master concluded '${{ steps.wait-for-im-build.outputs.conclusion }}', so no artifact was downloaded. Nothing can be tested on this platform until that build is fixed."
+          exit 1
+        fi
+
         case "$RUNNER_OS" in
           Linux)
             echo "LD_LIBRARY_PATH=$PWD/im-libs:$LD_LIBRARY_PATH" >> "$GITHUB_ENV" ;;
