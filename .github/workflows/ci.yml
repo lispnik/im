@@ -41,28 +41,32 @@ jobs:
 
     defaults:
       run:
-        # Git Bash on the Windows runner, so the one set of shell steps
-        # below works on all three platforms.
+        # Git Bash on the Windows runner, so one set of shell steps works
+        # on all three platforms.
         shell: bash
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Common Lisp (sbcl-bin)
-      uses: 40ants/setup-lisp@v4
-      with:
-        asdf-system: im
-        qlfile-template: |
-          dist ultralisp http://dist.ultralisp.org/
-        # sbcl-bin, not sbcl: per the setup-lisp support matrix, plain
-        # "sbcl" is only supported on Linux, while "sbcl-bin" is the one
-        # implementation supported on Linux, macOS and Windows alike.
-        lisp: sbcl-bin
+    - name: Install SBCL (Linux)
+      if: matrix.platform == 'linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sbcl
+
+    - name: Install SBCL (macOS)
+      if: matrix.platform == 'macos'
+      run: brew install sbcl
+
+    - name: Install SBCL (Windows)
+      if: matrix.platform == 'windows'
+      run: |
+        choco install sbcl --no-progress -y
+        cygpath -w "/c/Program Files/Steel Bank Common Lisp" >> "$GITHUB_PATH"
 
     - name: Install system dependencies (Linux)
       if: matrix.platform == 'linux'
       run: |
-        sudo apt-get update
         sudo apt-get install -y \
           libx11-6 \
           libxext6 \
@@ -100,11 +104,43 @@ jobs:
           jasper \
           fftw
 
-    # No "Install system dependencies (Windows)" counterpart: upstream
-    # builds Windows against vcpkg x64-windows, whose DLLs (tiff.dll,
-    # jpeg62.dll, ...) do not match what choco or MSYS2 would install, so
-    # the im-libs artifact has to carry them. The listing in "Setup
-    # library paths (Windows)" is what shows whether it does.
+    # tecgraf-base is a sibling project rather than a registry system, so
+    # it is not in ocicl.csv and ocicl cannot fetch it. Clone it and put
+    # it on the source registry alongside this checkout.
+    - name: Check out tecgraf-base
+      run: git clone --depth 1 https://github.com/lispnik/tecgraf-base.git "$HOME/tecgraf-base"
+
+    - name: Install and configure ocicl
+      run: |
+        # Clone the ocicl *tool* outside the repo so it does not collide
+        # with this project's gitignored ocicl/ dependency directory.
+        git clone --depth 1 https://github.com/ocicl/ocicl.git "$HOME/ocicl-src"
+        ( cd "$HOME/ocicl-src" && sbcl --non-interactive --load setup.lisp )
+
+        # setup.lisp installs the binary and the runtime to different
+        # places on Windows than on Unix, so locate them rather than
+        # assume either layout.
+        bin="$(find "$HOME" -type f \( -name ocicl -o -name ocicl.exe \) 2>/dev/null \
+                 | grep -v '/ocicl-src/' | head -1)"
+        runtime="$(find "$HOME" -type f -name ocicl-runtime.lisp 2>/dev/null \
+                     | grep -v '/ocicl-src/' | head -1)"
+        test -n "$bin"     || { echo "ocicl binary not found after setup"; exit 1; }
+        test -n "$runtime" || { echo "ocicl runtime not found after setup"; exit 1; }
+        echo "ocicl binary:  $bin"
+        echo "ocicl runtime: $runtime"
+
+        dirname "$bin" >> "$GITHUB_PATH"
+        if [ "$RUNNER_OS" = Windows ]; then
+          runtime="$(cygpath -m "$runtime")"
+        fi
+        echo "OCICL_RUNTIME=$runtime" >> "$GITHUB_ENV"
+
+    - name: Restore dependencies
+      run: |
+        ocicl setup
+        # Installs the versions pinned in the checked-in ocicl.csv.
+        ocicl install
+
     - name: Wait for tecgraf-im build completion
       uses: fountainhead/action-wait-for-check@v1.1.0
       id: wait-for-im-build
@@ -141,55 +177,86 @@ jobs:
         name: ${{ matrix.im-headers-artifact }}
         path: im-headers/
 
-    # IM_LIBS_DIR is what the Lisp steps below push onto
-    # cffi:*foreign-library-directories*, so each platform sets it in the
-    # form its own SBCL understands.
-    - name: Setup library paths (Linux)
-      if: matrix.platform == 'linux'
+    # There is no Windows counterpart to the dependency installs above:
+    # upstream builds Windows against vcpkg x64-windows, whose DLLs
+    # (tiff.dll, jpeg62.dll, ...) do not match what choco or MSYS2 would
+    # install, so the im-libs artifact has to carry them. The listing at
+    # the end of this step is what shows whether it does.
+    - name: Set up library and source paths
       run: |
-        echo "LD_LIBRARY_PATH=$PWD/im-libs:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-        echo "IM_LIBS_DIR=$PWD/im-libs" >> $GITHUB_ENV
-        ls -la im-libs/
+        case "$RUNNER_OS" in
+          Linux)
+            echo "LD_LIBRARY_PATH=$PWD/im-libs:$LD_LIBRARY_PATH" >> "$GITHUB_ENV" ;;
+          macOS)
+            echo "DYLD_LIBRARY_PATH=$PWD/im-libs:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV" ;;
+          Windows)
+            # Windows resolves dependent DLLs through PATH, and the IM
+            # DLLs load each other, so the directory has to be on it.
+            cygpath -w "$PWD/im-libs" >> "$GITHUB_PATH" ;;
+        esac
 
-    - name: Setup library paths (macOS)
-      if: matrix.platform == 'macos'
-      run: |
-        echo "DYLD_LIBRARY_PATH=$PWD/im-libs:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
-        echo "IM_LIBS_DIR=$PWD/im-libs" >> $GITHUB_ENV
-        ls -la im-libs/
+        # SBCL on Windows is a native binary, so it cannot use the
+        # /d/a/... MSYS paths Git Bash reports. cygpath -m gives a Windows
+        # path with forward slashes, which SBCL accepts and which needs no
+        # backslash escaping inside a Lisp string.
+        libs="$PWD/im-libs"
+        workspace="$PWD"
+        tecgraf="$HOME/tecgraf-base"
+        if [ "$RUNNER_OS" = Windows ]; then
+          libs="$(cygpath -m "$libs")"
+          workspace="$(cygpath -m "$workspace")"
+          tecgraf="$(cygpath -m "$tecgraf")"
+        fi
+        echo "IM_LIBS_DIR=$libs" >> "$GITHUB_ENV"
+        echo "LISP_WORKSPACE=$workspace" >> "$GITHUB_ENV"
+        echo "TECGRAF_BASE_DIR=$tecgraf" >> "$GITHUB_ENV"
 
-    - name: Setup library paths (Windows)
-      if: matrix.platform == 'windows'
-      run: |
-        # SBCL here is a native Windows binary, so it cannot use the
-        # /d/a/... MSYS path that $PWD holds under Git Bash. cygpath -m
-        # gives a Windows path with forward slashes, which SBCL accepts
-        # and which needs no backslash escaping inside a Lisp string.
-        echo "IM_LIBS_DIR=$(cygpath -m "$PWD")/im-libs" >> $GITHUB_ENV
-        # Windows resolves dependent DLLs through PATH, and the IM DLLs
-        # load each other, so the directory has to be on it.
-        cygpath -w "$PWD/im-libs" >> $GITHUB_PATH
         ls -la im-libs/
 
     - name: Test library loading
       run: |
-        sbcl --eval "(progn (push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*) (ql:quickload :im-cffi) (format t \"~%IM library loaded successfully~%\") (quit))"
+        # cffi is loaded before the form that pushes onto
+        # cffi:*foreign-library-directories*, because each --eval is read
+        # only after the previous one has been evaluated - the package has
+        # to exist before that symbol can be read.
+        sbcl --non-interactive \
+          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
+          --eval '(asdf:load-system :cffi)' \
+          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
+          --eval '(asdf:load-system :im-cffi)' \
+          --eval '(format t "~%IM library loaded successfully~%")'
 
-    - name: Run basic IM tests
+    - name: Run the test suite
       run: |
-        sbcl --eval "(progn (push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*) (ql:quickload :im-tests) (asdf:test-system :im) (quit))"
+        # :im-tests, not :im - im.asd defines no test-op, so testing :im
+        # would silently run nothing.
+        sbcl --non-interactive \
+          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
+          --eval '(asdf:load-system :cffi)' \
+          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
+          --eval '(asdf:test-system :im-tests)'
 
-    - name: Run process tests (if available)
+    - name: Load im-process
       run: |
-        sbcl --eval "(progn (push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*) (ql:quickload :im-process) (format t \"~%IM process library loaded successfully~%\") (quit))" || echo "Process tests not available"
+        sbcl --non-interactive \
+          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
+          --eval '(asdf:load-system :cffi)' \
+          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
+          --eval '(asdf:load-system :im-process)' \
+          --eval '(format t "~%IM process library loaded successfully~%")'
 
     - name: Test example usage
       run: |
-        sbcl --eval "(progn
-          (push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)
-          (ql:quickload :im)
-          (im:with-im ()
-            (format t \"~%IM initialized successfully~%\")
-            (format t \"Version: ~A~%\" (im:version))
-            (format t \"Available formats: ~A~%\" (im:format-list)))
-          (quit))"
+        sbcl --non-interactive \
+          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
+          --eval '(asdf:load-system :cffi)' \
+          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
+          --eval '(asdf:load-system :im)' \
+          --eval '(im:with-im ()
+                    (format t "~%IM initialized successfully~%")
+                    (format t "Version: ~A~%" (im:version))
+                    (format t "Available formats: ~A~%" (im:format-list)))'
