@@ -30,5 +30,9 @@
   :depends-on (#:fiveam
                #:im
                #:im-process)
+  ;; FiveAM's RUN! prints the report and returns NIL when anything
+  ;; failed. Discarding that return value makes TEST-OP succeed on a
+  ;; failing suite, which is how CI went green with 3 tests failing.
   :perform (test-op (op c)
-                    (uiop:symbol-call :fiveam :run! (uiop:find-symbol* :im-suite :im-tests))))
+                    (unless (uiop:symbol-call :fiveam :run! (uiop:find-symbol* :im-suite :im-tests))
+                      (error "IM test suite failed."))))

@@ -1,1 +1,24 @@
 * text eol=lf
+
+# Binary assets must be exempt from the LF normalisation above. A PNG
+# signature is 89 50 4E 47 0D 0A 1A 0A -- it contains a CRLF pair on
+# purpose, so that exactly this kind of text-mode mangling is detectable.
+# Normalising it strips the CR and the file stops being a PNG.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.tif binary
+*.tiff binary
+*.ico binary
+*.tga binary
+*.pcx binary
+*.sgi binary
+*.ras binary
+*.pnm binary
+*.pfm binary
+*.avi binary
+*.wmv binary
+*.jp2 binary
+*.fasl binary
