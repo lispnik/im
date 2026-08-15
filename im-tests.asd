@@ -22,11 +22,11 @@
                (:file "transform")
                (:file "calc")
                (:module "examples"
+                :serial t
                 :components ((:file "package")
-                            (:file "info")
-                            ;; (:file "processing")  ; TODO: Fix API calls
-                            ;; (:file "analysis")    ; TODO: Fix API calls
-                            )))
+                             (:file "info")
+                             (:file "processing")
+                             (:file "analysis"))))
   :depends-on (#:fiveam
                #:im
                #:im-process)

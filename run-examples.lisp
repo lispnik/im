@@ -1,4 +1,4 @@
-#!/usr/bin/env sbcl --script
+#!/usr/bin/env -S sbcl --script
 ;;;; Standalone runner for IM Lua examples ported to Common Lisp
 ;;;; Usage: sbcl --script run-examples.lisp
 ;;;; Or:    ./run-examples.lisp (if executable)

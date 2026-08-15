@@ -8,8 +8,9 @@
   :in im-suite)
 
 (defparameter *examples-image-dir*
-  #p"/Users/mkennedy/Projects/common-lisp/im/tests/images/"
-  "Directory containing test images for examples.")
+  (asdf:system-relative-pathname "im-tests" "tests/images/")
+  "Directory containing test images for examples. Resolved relative to
+the im-tests system so the suite works from any checkout.")
 
 (defun examples-image-path (filename)
   "Get full path to a test image file."

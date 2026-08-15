@@ -36,15 +36,14 @@ The following test images are used by the examples:
 
 - **sobel.lua** → `sobel-edge-detection` test
   - Applies Sobel edge detection filter
-  - Handles alpha channel preservation
 
 - **canny.lua** → `canny-edge-detection` test
   - Canny edge detection with hysteresis thresholding
   - Automatic threshold estimation
 
-- **process.lua** → `process-operations` test
-  - Histogram calculation and visualization
-  - RGB component splitting and merging
+- **process.lua** → `split-and-merge-components`, `replace-color-operation`
+  and `bit-mask-operation` tests
+  - RGB component splitting and merging (verified to round-trip losslessly)
   - Color replacement operations
   - Bit mask operations
 
@@ -52,12 +51,22 @@ The following test images are used by the examples:
 
 - **analyze.lua** → `region-analysis` test
   - Region detection and labeling
-  - Area measurement
+  - Area and centroid measurement
   - Principal axis analysis (major/minor lengths)
 
-- Additional analysis functions:
-  - Histogram analysis tests
-  - Comprehensive statistics validation
+- Additional analysis tests:
+  - `region-holes-and-perimeter` — perimeter and hole measurements
+  - `color-count-analysis` — distinct colour counting
+  - `statistics-analysis` — comprehensive statistics validation
+
+### Not Ported
+
+- The histogram section of **process.lua** (histogram calculation and its
+  GIF visualization) and the histogram assertions that used to sit in
+  `analysis.lisp`. `im-calc` has no `histogram`/`gray-histogram` binding
+  yet — see the `;;; TODO` in `process/statistics.lisp` — and `im-render`
+  does not export the `render-op` entry point the Lua original draws
+  with. `im-calc:count-colors` covers the nearest available ground.
 
 ## Running the Examples
 
@@ -99,18 +108,35 @@ The examples generate temporary output files in the test directory for verificat
 
 - Processed images (edge detection results, filtered images)
 - Component images (R, G, B channels)
-- Histogram visualizations
-- Analysis results
+- Merged and colour-replaced images
 
 ## API Mapping Notes
 
 ### Lua → Common Lisp Patterns
 
 - `im.FileImageLoad()` → `(im-file:image-load path)`
-- `image:Save()` → `(im-file:image-save image path format)`
-- `im.ProcessSobelConvolveNew()` → `(im-process:sobel-convolve-new image)`
-- `im.CalcHistogram()` → `(im-calc:histogram image channel)`
-- `im.AnalyzeFindRegions()` → `(im-analyze:find-regions binary region connectivity border)`
+- `image:Save()` → `(im-file:image-save path format image)` — note the
+  path comes first, and the image last
+- `im.ProcessSobelConvolveNew()` → `(im-convolve:sobel src dst)`
+- `im.ProcessCannyNew()` → `(im-convolve:canny src dst &optional stddev)`
+- `im.ProcessHysteresisThresEstimate()` → `(im-threshold:hysteresis-estimate image)`
+- `im.ProcessPercentThreshold()` → `(im-threshold:percent src dst percent)`
+- `im.ConvertColorSpace()` → `(im-convert:to-color-space src dst)`
+- `im.ProcessSplitComponents()` → `(im-color:split-components src &rest dsts)`
+- `im.ProcessMergeComponents()` → `(im-color:merge-components list-of-src dst)`
+- `im.ProcessBitMask()` → `(im-arithmetic:bit-mask src dst mask op)`
+- `im.AnalyzeFindRegions()` → `(im-analyze:find-regions binary region :connect 4 :touch-border nil)`
+- `im.CalcImageStatistics()` → `(im-calc:image-statistics image)`, returning
+  a vector of `stats` objects read with `im-calc:stats-min` / `-max` / `-mean`
+
+Most of the `im-process` operations live in focused packages
+(`im-convolve`, `im-threshold`, `im-color`, `im-arithmetic`, `im-analyze`,
+`im-calc`, `im-convert`) rather than in `im-process` itself, which only
+exports the `counter-aborted` condition.
+
+Measurement functions (`measure-area`, `measure-perimeter`,
+`measure-principal-axis`, …) and file attribute values return **vectors**,
+so index them with `aref`/`elt` rather than `nth`.
 
 ### Memory Management
 

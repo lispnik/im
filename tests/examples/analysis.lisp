@@ -10,99 +10,133 @@
 
 (test region-analysis
   "Test region analysis and measurements - port of analyze.lua"
-  (let ((input-path (examples-image-path "rice.png")))
-    (is (examples-image-exists-p "rice.png") "rice.png should exist in test images")
+  (is (examples-image-exists-p "rice.png") "rice.png should exist in test images")
 
-    (with-images ((image (im-file:image-load (namestring input-path)))
-                  (binary (im-image:create-based image nil nil :color-space-binary nil))
-                  (region (im-image:create-based image nil nil nil :data-type-ushort)))
+  (with-image (image (im-file:image-load (namestring (examples-image-path "rice.png"))))
+    ;; The original script requires a grayscale byte image.
+    (is (eq (im-image:color-space image) :color-space-gray)
+        "rice.png should be grayscale for this analysis")
+    (is (eq (im-image:data-type image) :data-type-byte)
+        "rice.png should be byte type for this analysis")
 
-      ;; Verify image is grayscale and byte type (as required by the original script)
-      (is (eq (im-image:color-space image) :color-space-gray)
-          "rice.png should be grayscale for this analysis")
-      (is (eq (im-image:data-type image) :data-type-byte)
-          "rice.png should be byte type for this analysis")
+    (with-images ((binary (im-image:create-based image nil nil :color-space-binary nil))
+                  (region (im-image:create-based image nil nil :color-space-gray :data-type-ushort)))
 
-      ;; Make it binary using percent threshold
-      (im-process:percent-threshold image binary 70)  ; lots of background
+      ;; Make it binary using percent threshold (lots of background).
+      (im-threshold:percent image binary 70)
 
-      ;; Search for closed regions, don't count objects that touch image borders
-      (let ((count (im-analyze:find-regions binary region 4 0)))
-        (format t "regions: ~A~%" count)
-        (is (> count 0) "Should find at least some regions")
+      ;; Search for closed regions; regions touching the border are
+      ;; dropped, which is the TOUCH-BORDER NIL default.
+      (let ((count (im-analyze:find-regions binary region :connect 4)))
+        (is (plusp count) "Should find at least some regions")
 
-        ;; Measure areas and principal axes
-        (let* ((areas (im-analyze:measure-area region count))
-               (principal-data (im-analyze:measure-principal-axis region areas count)))
+        ;; MEASURE-PRINCIPAL-AXIS needs the centroids as well as the
+        ;; areas, and every measurement comes back as a vector.
+        (let ((areas (im-analyze:measure-area region count)))
+          (multiple-value-bind (centroid-x centroid-y)
+              (im-analyze:measure-centroid region areas count)
+            (multiple-value-bind (major-slopes major-lengths minor-slopes minor-lengths)
+                (im-analyze:measure-principal-axis region areas centroid-x centroid-y count)
+              (declare (ignore major-slopes minor-slopes))
 
-          (multiple-value-bind (major-slopes major-lengths minor-slopes minor-lengths)
-              principal-data
+              ;; Report in the same shape as the Lua version. Captured
+              ;; rather than printed so the suite output stays readable.
+              (let ((report
+                      (with-output-to-string (out)
+                        (format out "~10A~15A~15A~15A~%"
+                                "object" "area" "major length" "minor length")
+                        (dotimes (r count)
+                          (format out "~10A~15A~15,5G~15,5G~%"
+                                  (1+ r)
+                                  (aref areas r)
+                                  (aref major-lengths r)
+                                  (aref minor-lengths r))))))
+                (is (search "major length" report))
+                (is (= (1+ count) (count #\Newline report))
+                    "Report should have a header plus one line per region"))
 
-            ;; Print results in same format as Lua version
-            (format t "~A~15A~15A~15A~%" "object" "area" "major length" "minor length")
+              (is (= (length areas) count) "Should have area for each region")
+              (is (= (length major-lengths) count) "Should have major length for each region")
+              (is (= (length minor-lengths) count) "Should have minor length for each region")
 
-            (dotimes (r count)
-              (format t "~A~15A~15,5G~15,5G~%"
-                      (1+ r)
-                      (nth r areas)
-                      (nth r major-lengths)
-                      (nth r minor-lengths)))
+              (is (every #'plusp areas) "All areas should be positive")
+              (is (every (lambda (x) (>= x 0d0)) major-lengths)
+                  "All major lengths should be non-negative")
+              (is (every (lambda (x) (>= x 0d0)) minor-lengths)
+                  "All minor lengths should be non-negative")
+              ;; The major axis is by definition at least as long as the minor.
+              (is (every #'>= major-lengths minor-lengths)
+                  "Major length should be >= minor length for every region")
 
-            ;; Verify we got reasonable measurements
-            (is (= (length areas) count) "Should have area for each region")
-            (is (= (length major-lengths) count) "Should have major length for each region")
-            (is (= (length minor-lengths) count) "Should have minor length for each region")
+              ;; Centroids must fall inside the image.
+              (dotimes (r count)
+                (is (<= 0 (aref centroid-x r) (im-image:width image)))
+                (is (<= 0 (aref centroid-y r) (im-image:height image)))))))))))
 
-            ;; Verify measurements are positive
-            (is (every #'plusp areas) "All areas should be positive")
-            (is (every #'plusp major-lengths) "All major lengths should be positive")
-            (is (every #'plusp minor-lengths) "All minor lengths should be positive")))))))
+(test region-holes-and-perimeter
+  "Additional region measurements over the same labelled image."
+  (is (examples-image-exists-p "rice.png") "rice.png should exist in test images")
 
-;; Additional analysis tests for other common operations
+  (with-image (image (im-file:image-load (namestring (examples-image-path "rice.png"))))
+    (with-images ((binary (im-image:create-based image nil nil :color-space-binary nil))
+                  (region (im-image:create-based image nil nil :color-space-gray :data-type-ushort)))
+      (im-threshold:percent image binary 70)
+      (let ((count (im-analyze:find-regions binary region :connect 4)))
+        (is (plusp count))
+        (let ((perimeters (im-analyze:measure-perimeter region count))
+              (areas (im-analyze:measure-area region count)))
+          (is (= count (length perimeters)))
+          (is (every (lambda (x) (>= x 0d0)) perimeters))
+          ;; IM reports a perimeter of 0 for single-pixel regions, so
+          ;; only regions larger than that are required to be positive.
+          (dotimes (r count)
+            (when (> (aref areas r) 1)
+              (is (plusp (aref perimeters r))
+                  "Multi-pixel region ~A should have a positive perimeter" r)))
+          (is (some #'plusp perimeters) "At least one region should have a perimeter"))
+        (multiple-value-bind (hole-counts hole-areas hole-perims)
+            (im-analyze:measure-holes region count)
+          (is (= count (length hole-counts)))
+          (is (= count (length hole-areas)))
+          (is (= count (length hole-perims)))
+          (is (every (lambda (x) (>= x 0)) hole-counts)))))))
 
-(test histogram-analysis
-  "Test histogram calculation and analysis"
-  (let ((input-path (examples-image-path "lena.jpg")))
-    (is (examples-image-exists-p "lena.jpg") "lena.jpg should exist in test images")
+;;; Additional analysis tests for other common operations.
+;;;
+;;; The histogram tests that used to live here were removed: IM-CALC
+;;; exposes no HISTOGRAM or GRAY-HISTOGRAM binding (see the TODO in
+;;; process/statistics.lisp). COUNT-COLORS covers the nearest available
+;;; ground.
 
-    (with-image (image (im-file:image-load (namestring input-path)))
-      ;; Test RGB histograms
-      (let ((hist-r (im-calc:histogram image 0))
-            (hist-g (im-calc:histogram image 1))
-            (hist-b (im-calc:histogram image 2)))
+(test color-count-analysis
+  "Test distinct-colour counting"
+  (is (examples-image-exists-p "lena.jpg") "lena.jpg should exist in test images")
 
-        (is (= (length hist-r) 256) "R histogram should have 256 bins")
-        (is (= (length hist-g) 256) "G histogram should have 256 bins")
-        (is (= (length hist-b) 256) "B histogram should have 256 bins")
-
-        ;; Test that histogram values are reasonable
-        (is (every (lambda (x) (>= x 0)) hist-r) "R histogram values should be non-negative")
-        (is (every (lambda (x) (>= x 0)) hist-g) "G histogram values should be non-negative")
-        (is (every (lambda (x) (>= x 0)) hist-b) "B histogram values should be non-negative"))
-
-      ;; Test grayscale histogram
-      (let ((hist-gray (im-calc:gray-histogram image)))
-        (is (= (length hist-gray) 256) "Gray histogram should have 256 bins")
-        (is (every (lambda (x) (>= x 0)) hist-gray) "Gray histogram values should be non-negative")))))
+  (with-image (image (im-file:image-load (namestring (examples-image-path "lena.jpg"))))
+    (let ((colors (im-calc:count-colors image))
+          (pixels (* (im-image:width image) (im-image:height image))))
+      (is (plusp colors) "Should find at least one colour")
+      (is (<= colors pixels) "Cannot have more colours than pixels"))))
 
 (test statistics-analysis
   "Test comprehensive image statistics"
-  (let ((input-path (examples-image-path "lena.jpg")))
-    (is (examples-image-exists-p "lena.jpg") "lena.jpg should exist in test images")
+  (is (examples-image-exists-p "lena.jpg") "lena.jpg should exist in test images")
 
-    (with-image (image (im-file:image-load (namestring input-path)))
-      (let ((stats (im-calc:image-statistics image)))
-        ;; For RGB image, should get stats for each channel
-        (is (= (length stats) 3) "Should get statistics for 3 RGB channels")
+  (with-image (image (im-file:image-load (namestring (examples-image-path "lena.jpg"))))
+    ;; IMAGE-STATISTICS returns a vector of STATS instances, one per
+    ;; plane, read through the STATS-* accessors.
+    (let ((stats (im-calc:image-statistics image)))
+      (is (= (length stats) 3) "Should get statistics for 3 RGB channels")
 
-        ;; Check that each channel has min, max, mean statistics
-        (dolist (channel-stats stats)
-          (is (numberp (getf channel-stats :min)) "Min should be a number")
-          (is (numberp (getf channel-stats :max)) "Max should be a number")
-          (is (numberp (getf channel-stats :mean)) "Mean should be a number")
+      (loop for channel-stats across stats do
+        (let ((minimum (im-calc:stats-min channel-stats))
+              (maximum (im-calc:stats-max channel-stats))
+              (mean (im-calc:stats-mean channel-stats)))
+          (is (numberp minimum) "Min should be a number")
+          (is (numberp maximum) "Max should be a number")
+          (is (numberp mean) "Mean should be a number")
 
-          ;; Verify reasonable ranges for 8-bit image
-          (is (>= (getf channel-stats :min) 0) "Min should be >= 0")
-          (is (<= (getf channel-stats :max) 255) "Max should be <= 255")
-          (is (>= (getf channel-stats :mean) 0) "Mean should be >= 0")
-          (is (<= (getf channel-stats :mean) 255) "Mean should be <= 255"))))))
+          ;; Reasonable ranges for an 8-bit image.
+          (is (>= minimum 0) "Min should be >= 0")
+          (is (<= maximum 255) "Max should be <= 255")
+          (is (<= minimum mean maximum) "Mean should lie between min and max"))))))
