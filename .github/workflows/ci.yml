@@ -2,270 +2,226 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [master, 'feat/*']
   pull_request:
-    branches: [ main, master ]
-  # Trigger when tecgraf-im builds complete
+    branches: [master]
+  workflow_dispatch:
+  # Sent by lispnik/tecgraf-im's notify-downstream workflow once a commit has
+  # built successfully on every platform. The payload carries that commit and
+  # the run id per platform, so the artifacts fetched below are all from the
+  # same upstream commit rather than from whatever happened to be newest.
   repository_dispatch:
     types: [tecgraf-im-build-complete]
 
 jobs:
   test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
     strategy:
-      # Without this, one platform failing cancels the others and hides
-      # whether the failure is platform-specific.
+      # One platform failing must not hide the others; whether a failure is
+      # platform-specific is usually the first thing worth knowing.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
-          - os: ubuntu-latest
-            platform: linux
+          - name: Linux amd64
+            os: ubuntu-24.04
+            im-artifact: im-libs-ubuntu-24.04
             im-workflow: ci-linux.yml
-            im-libs-artifact: im-libs-ubuntu-24.04
-            im-headers-artifact: im-headers-ubuntu-24.04
-            im-check-name: Build IM (Ubuntu 24.04)
-          - os: macos-latest
-            platform: macos
+            run-id-key: linux_run_id
+          # Free on public repositories, and the only source of aarch64 Linux
+          # libraries -- upstream's Linux CI was x86_64 only until recently.
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            im-artifact: im-libs-ubuntu-24.04-arm
+            im-workflow: ci-linux.yml
+            run-id-key: linux_run_id
+          - name: macOS arm64
+            os: macos-15
+            im-artifact: im-libs-macos-15
             im-workflow: ci-macos.yml
-            im-libs-artifact: im-libs-macos-15
-            im-headers-artifact: im-headers-macos-15
-            im-check-name: Build IM (macos-15)
-          - os: windows-latest
-            platform: windows
+            run-id-key: macos_run_id
+          - name: Windows x64
+            os: windows-2022
+            im-artifact: im-libs-windows-2022
             im-workflow: ci-windows.yml
-            im-libs-artifact: im-libs-windows-2022
-            im-headers-artifact: im-headers-windows-2022
-            im-check-name: Build IM (windows-2022)
-
-    runs-on: ${{ matrix.os }}
+            run-id-key: windows_run_id
 
     defaults:
       run:
         # Git Bash on the Windows runner, so one set of shell steps works
-        # on all three platforms.
+        # everywhere.
         shell: bash
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install SBCL (Linux)
-      if: matrix.platform == 'linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y sbcl
+      - name: Install SBCL (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends sbcl
 
-    - name: Install SBCL (macOS)
-      if: matrix.platform == 'macos'
-      run: brew install sbcl
+      - name: Install SBCL (macOS)
+        if: runner.os == 'macOS'
+        run: brew install sbcl
 
-    - name: Install SBCL (Windows)
-      if: matrix.platform == 'windows'
-      run: |
-        choco install sbcl --no-progress -y
-        cygpath -w "/c/Program Files/Steel Bank Common Lisp" >> "$GITHUB_PATH"
+      - name: Install SBCL (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install sbcl --no-progress -y
+          cygpath -w "/c/Program Files/Steel Bank Common Lisp" >> "$GITHUB_PATH"
 
-    - name: Install system dependencies (Linux)
-      if: matrix.platform == 'linux'
-      run: |
-        sudo apt-get install -y \
-          libx11-6 \
-          libxext6 \
-          libxrender1 \
-          libxft2 \
-          libcairo2 \
-          libpango-1.0-0 \
-          libfreetype6 \
-          libgl1 \
-          libglu1-mesa \
-          liblua5.4-0 \
-          lua5.4 \
-          libtiff6 \
-          libpng16-16 \
-          libjpeg8 \
-          zlib1g \
-          libexif12 \
-          liblzf1 \
-          liblz4-1 \
-          libfftw3-double3 \
-          libgomp1
+      # IM's own runtime dependencies. The artifact carries libim and its
+      # add-ons but not libtiff, libjpeg and friends, which every platform has
+      # a package for. Windows is the exception: upstream builds it against
+      # vcpkg, whose DLLs do not match anything choco or MSYS2 would install,
+      # so the artifact has to carry them and there is nothing to install here.
+      - name: Install IM runtime dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            libtiff6 libjpeg8 libpng16-16 zlib1g libexif12 \
+            liblzf1 liblz4-1 libfftw3-double3 libfftw3-single3 libgomp1
 
-    - name: Install system dependencies (macOS)
-      if: matrix.platform == 'macos'
-      run: |
-        brew install \
-          cairo \
-          pango \
-          freetype \
-          lua \
-          libtiff \
-          libpng \
-          jpeg \
-          libexif \
-          jasper \
-          fftw
+      - name: Install IM runtime dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libtiff jpeg-turbo libpng libexif liblzf lz4 fftw libomp
 
-    # tecgraf-base is a sibling project rather than a registry system, so
-    # it is not in ocicl.csv and ocicl cannot fetch it. Clone it and put
-    # it on the source registry alongside this checkout.
-    - name: Check out tecgraf-base
-      run: git clone --depth 1 https://github.com/lispnik/tecgraf-base.git "$HOME/tecgraf-base"
+      - name: Install and configure ocicl
+        run: |
+          # Clone the ocicl *tool* outside the repository, so it cannot collide
+          # with this project's gitignored ocicl/ dependency directory.
+          git clone --depth 1 https://github.com/ocicl/ocicl.git "$HOME/ocicl-src"
+          ( cd "$HOME/ocicl-src" && sbcl --non-interactive --load setup.lisp )
 
-    - name: Install and configure ocicl
-      run: |
-        # Clone the ocicl *tool* outside the repo so it does not collide
-        # with this project's gitignored ocicl/ dependency directory.
-        git clone --depth 1 https://github.com/ocicl/ocicl.git "$HOME/ocicl-src"
-        ( cd "$HOME/ocicl-src" && sbcl --non-interactive --load setup.lisp )
+          # setup.lisp installs the binary and the runtime to different places
+          # on Windows than on Unix, so locate them rather than assume either.
+          bin="$(find "$HOME" -type f \( -name ocicl -o -name ocicl.exe \) 2>/dev/null \
+                   | grep -v '/ocicl-src/' | head -1)"
+          runtime="$(find "$HOME" -type f -name ocicl-runtime.lisp 2>/dev/null \
+                       | grep -v '/ocicl-src/' | head -1)"
+          test -n "$bin"     || { echo "ocicl binary not found after setup"; exit 1; }
+          test -n "$runtime" || { echo "ocicl runtime not found after setup"; exit 1; }
 
-        # setup.lisp installs the binary and the runtime to different
-        # places on Windows than on Unix, so locate them rather than
-        # assume either layout.
-        bin="$(find "$HOME" -type f \( -name ocicl -o -name ocicl.exe \) 2>/dev/null \
-                 | grep -v '/ocicl-src/' | head -1)"
-        runtime="$(find "$HOME" -type f -name ocicl-runtime.lisp 2>/dev/null \
-                     | grep -v '/ocicl-src/' | head -1)"
-        test -n "$bin"     || { echo "ocicl binary not found after setup"; exit 1; }
-        test -n "$runtime" || { echo "ocicl runtime not found after setup"; exit 1; }
-        echo "ocicl binary:  $bin"
-        echo "ocicl runtime: $runtime"
+          dirname "$bin" >> "$GITHUB_PATH"
+          if [ "$RUNNER_OS" = Windows ]; then runtime="$(cygpath -m "$runtime")"; fi
+          echo "OCICL_RUNTIME=$runtime" >> "$GITHUB_ENV"
 
-        dirname "$bin" >> "$GITHUB_PATH"
-        if [ "$RUNNER_OS" = Windows ]; then
-          runtime="$(cygpath -m "$runtime")"
-        fi
-        echo "OCICL_RUNTIME=$runtime" >> "$GITHUB_ENV"
+      - name: Restore dependencies
+        run: |
+          ocicl setup
+          ocicl install          # the versions pinned in ocicl.csv
 
-    - name: Restore dependencies
-      run: |
-        ocicl setup
-        # Installs the versions pinned in the checked-in ocicl.csv.
-        ocicl install
+      # Two ways in. A repository_dispatch names the exact upstream run, so
+      # every platform's libraries come from one commit. A push or PR has no
+      # such payload and takes the newest successful master build instead.
+      - name: Download IM libraries (from the dispatching run)
+        if: github.event_name == 'repository_dispatch'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repo: lispnik/tecgraf-im
+          run_id: ${{ github.event.client_payload[matrix.run-id-key] }}
+          name: ${{ matrix.im-artifact }}
+          path: im-libs/
 
-    - name: Wait for tecgraf-im build completion
-      uses: fountainhead/action-wait-for-check@v1.1.0
-      id: wait-for-im-build
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        # Must match the upstream job name exactly. The jobs there are
-        # named "Build IM (<runner>)", where <runner> is the image the
-        # artifact was built on - not this workflow's runner label.
-        checkName: ${{ matrix.im-check-name }}
-        ref: master
-        # This action takes owner and repo separately; a combined
-        # "lispnik/tecgraf-im" here is resolved as
-        # lispnik/lispnik/tecgraf-im and 404s.
-        owner: lispnik
-        repo: tecgraf-im
-        timeoutSeconds: 1800
-        intervalSeconds: 30
+      - name: Download IM libraries (latest master)
+        if: github.event_name != 'repository_dispatch'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repo: lispnik/tecgraf-im
+          workflow: ${{ matrix.im-workflow }}
+          branch: master
+          name: ${{ matrix.im-artifact }}
+          path: im-libs/
 
-    - name: Download IM library artifacts
-      if: steps.wait-for-im-build.outputs.conclusion == 'success'
-      uses: dawidd6/action-download-artifact@v2
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        workflow: ${{ matrix.im-workflow }}
-        repo: lispnik/tecgraf-im
-        branch: master
-        name: ${{ matrix.im-libs-artifact }}
-        path: im-libs/
+      # build/lib/ upstream holds more than libraries: the test binary, the
+      # demo programs, the Lua modules, and on macOS an .app bundle. Keeping
+      # them would not break anything, but the directory goes on the library
+      # search path and is worth having contain only libraries.
+      - name: Keep only the IM libraries
+        run: |
+          find im-libs -mindepth 1 -maxdepth 1 \
+            ! -name 'libim*' ! -name 'im*.dll' -exec rm -rf {} + || true
+          ls -la im-libs/
 
-    - name: Download IM header artifacts
-      if: steps.wait-for-im-build.outputs.conclusion == 'success'
-      uses: dawidd6/action-download-artifact@v2
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        workflow: ${{ matrix.im-workflow }}
-        repo: lispnik/tecgraf-im
-        branch: master
-        name: ${{ matrix.im-headers-artifact }}
-        path: im-headers/
+      # Upstream builds macOS dylibs with absolute install names pointing at
+      # ITS OWN build directory -- deliberately, because that makes them
+      # dlopen-able from a runtime with no rpath, which is what CFFI wants.
+      # Downloaded here, those paths do not exist, so libim_process's reference
+      # to libim dangles. Rewrite each id and each inter-library reference to
+      # where the files actually are.
+      - name: Repair macOS install names
+        if: runner.os == 'macOS'
+        run: |
+          cd im-libs
+          for lib in libim*.dylib; do
+            install_name_tool -id "$PWD/$lib" "$lib"
+            for dep in libim*.dylib; do
+              old="/Users/runner/work/tecgraf-im/tecgraf-im/build/lib/$dep"
+              install_name_tool -change "$old" "$PWD/$dep" "$lib" 2>/dev/null || true
+            done
+          done
+          otool -L libim_process.dylib | head -5
 
-    # There is no Windows counterpart to the dependency installs above:
-    # upstream builds Windows against vcpkg x64-windows, whose DLLs
-    # (tiff.dll, jpeg62.dll, ...) do not match what choco or MSYS2 would
-    # install, so the im-libs artifact has to carry them. The listing at
-    # the end of this step is what shows whether it does.
-    - name: Set up library and source paths
-      run: |
-        if [ ! -d im-libs ]; then
-          echo "::error::IM libraries unavailable. The upstream check '${{ matrix.im-check-name }}' on lispnik/tecgraf-im@master concluded '${{ steps.wait-for-im-build.outputs.conclusion }}', so no artifact was downloaded. Nothing can be tested on this platform until that build is fixed."
-          exit 1
-        fi
+      - name: Point the bindings at the libraries
+        run: |
+          libs="$PWD/im-libs"
+          case "$RUNNER_OS" in
+            Linux)   echo "LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH"   >> "$GITHUB_ENV" ;;
+            macOS)   echo "DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV" ;;
+            # Windows resolves dependent DLLs through PATH, and the IM DLLs
+            # load each other, so the directory has to be on it.
+            Windows) cygpath -w "$libs" >> "$GITHUB_PATH" ;;
+          esac
+          # SBCL on Windows is a native binary and cannot use Git Bash's
+          # /d/a/... paths. cygpath -m gives a Windows path with forward
+          # slashes, which SBCL accepts and which needs no escaping in a Lisp
+          # string.
+          if [ "$RUNNER_OS" = Windows ]; then libs="$(cygpath -m "$libs")"; fi
+          echo "IM_LIBRARY_PATH=$libs" >> "$GITHUB_ENV"
 
-        case "$RUNNER_OS" in
-          Linux)
-            echo "LD_LIBRARY_PATH=$PWD/im-libs:$LD_LIBRARY_PATH" >> "$GITHUB_ENV" ;;
-          macOS)
-            echo "DYLD_LIBRARY_PATH=$PWD/im-libs:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV" ;;
-          Windows)
-            # Windows resolves dependent DLLs through PATH, and the IM
-            # DLLs load each other, so the directory has to be on it.
-            cygpath -w "$PWD/im-libs" >> "$GITHUB_PATH" ;;
-        esac
+      - name: Report what loaded
+        run: |
+          sbcl --non-interactive \
+            --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+            --eval '(asdf:load-system :im)' \
+            --eval '(progn
+                      (format t "~%IM version: ~A (~A)~%" (im:version) (im:version-date))
+                      (format t "Formats: ~{~A~^ ~}~%" (im:format-list))
+                      (format t "FFTW3: ~A  Capture: ~A~%"
+                              (im:fftw3-available-p) (im:capture-available-p))
+                      (dolist (entry (im:loaded-libraries))
+                        (format t "  ~A -> ~A~%" (car entry) (cdr entry))))'
 
-        # SBCL on Windows is a native binary, so it cannot use the
-        # /d/a/... MSYS paths Git Bash reports. cygpath -m gives a Windows
-        # path with forward slashes, which SBCL accepts and which needs no
-        # backslash escaping inside a Lisp string.
-        libs="$PWD/im-libs"
-        workspace="$PWD"
-        tecgraf="$HOME/tecgraf-base"
-        if [ "$RUNNER_OS" = Windows ]; then
-          libs="$(cygpath -m "$libs")"
-          workspace="$(cygpath -m "$workspace")"
-          tecgraf="$(cygpath -m "$tecgraf")"
-        fi
-        echo "IM_LIBS_DIR=$libs" >> "$GITHUB_ENV"
-        echo "LISP_WORKSPACE=$workspace" >> "$GITHUB_ENV"
-        echo "TECGRAF_BASE_DIR=$tecgraf" >> "$GITHUB_ENV"
+      - name: Test
+        run: |
+          sbcl --non-interactive \
+            --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+            --eval '(asdf:test-system :im)'
 
-        ls -la im-libs/
+      # Builds bin/im, which is also what makes the CLI tests in the suite run
+      # rather than skip -- they drive the binary as a subprocess, and that is
+      # the only check that a dumped image reopens its foreign libraries.
+      - name: Build the CLI
+        run: |
+          sbcl --non-interactive \
+            --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+            --eval '(asdf:make :im/cli)'
+          ls -la bin/
 
-    - name: Test library loading
-      run: |
-        # cffi is loaded before the form that pushes onto
-        # cffi:*foreign-library-directories*, because each --eval is read
-        # only after the previous one has been evaluated - the package has
-        # to exist before that symbol can be read.
-        sbcl --non-interactive \
-          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
-          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
-          --eval '(asdf:load-system :cffi)' \
-          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
-          --eval '(asdf:load-system :im-cffi)' \
-          --eval '(format t "~%IM library loaded successfully~%")'
+      - name: Smoke-test the binary
+        run: |
+          ./bin/im library
+          ./bin/im info tests/images/lena.jpg --json
+          ./bin/im process tests/images/lena.jpg /tmp/ci-out.png \
+            --op resize=50% --op colorspace=gray --op sobel
+          ./bin/im stats /tmp/ci-out.png
 
-    - name: Report IM version and formats
-      run: |
-        sbcl --non-interactive \
-          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
-          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
-          --eval '(asdf:load-system :cffi)' \
-          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
-          --eval '(asdf:load-system :im)' \
-          --eval '(progn
-                    (format t "~%Version: ~A~%" (im:version))
-                    (format t "Available formats: ~A~%" (im:format-list)))'
-
-    - name: Run the test suite
-      run: |
-        # :im-tests, not :im - im.asd defines no test-op, so testing :im
-        # would silently run nothing.
-        sbcl --non-interactive \
-          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
-          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
-          --eval '(asdf:load-system :cffi)' \
-          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
-          --eval '(asdf:test-system :im-tests)'
-
-    - name: Load im-process
-      run: |
-        sbcl --non-interactive \
-          --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
-          --eval "(asdf:initialize-source-registry '(:source-registry (:directory \"$LISP_WORKSPACE\") (:directory \"$TECGRAF_BASE_DIR\") :inherit-configuration))" \
-          --eval '(asdf:load-system :cffi)' \
-          --eval "(push \"$IM_LIBS_DIR/\" cffi:*foreign-library-directories*)" \
-          --eval '(asdf:load-system :im-process)' \
-          --eval '(format t "~%IM process library loaded successfully~%")'
-
+      - name: Re-run the suite with the binary present
+        run: |
+          sbcl --non-interactive \
+            --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+            --eval '(asdf:test-system :im)'

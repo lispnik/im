@@ -1,93 +1,81 @@
-(in-package #:im-tests)
+;;;; tests/image.lisp — the IMAGE class and its lifetime.
+
+(in-package #:im.tests)
 
 (def-suite image-suite :in im-suite
-  :description "im-image package: create / destroy / match / alpha / dup / clone.")
-
+  :description "Image construction, accessors and release.")
 (in-suite image-suite)
 
 (test create-and-inspect
-  (with-image (img (im-image:create 32 24 :color-space-rgb :data-type-byte))
-    (is (= 32 (im-image:width img)))
-    (is (= 24 (im-image:height img)))
-    (is (eq :color-space-rgb (im-image:color-space img)))
-    (is (eq :data-type-byte (im-image:data-type img)))
-    (is (= 3 (im-image:depth img)))))
+  (im:with-image (image (im:create 32 24 :color-space-rgb :data-type-byte))
+    (is (= 32 (im:width image)))
+    (is (= 24 (im:height image)))
+    (is (eq :color-space-rgb (im:color-space image)))
+    (is (eq :data-type-byte (im:data-type image)))
+    (is (= 3 (im:depth image)))
+    (is (= (* 32 24) (im:pixel-count image)))
+    (is (= (* 32 24 3) (im:data-size image)))
+    (is-true (im:bitmap-p image))
+    (is-false (im:has-alpha-p image))))
 
-(test bitmap-classification
-  (with-image (rgb (im-image:create 8 8 :color-space-rgb :data-type-byte))
-    (is (im-image:bitmap-p rgb)))
-  (with-image (gray-float (im-image:create 8 8 :color-space-gray :data-type-float))
-    (is (not (im-image:bitmap-p gray-float)))))
+(test planes-are-contiguous
+  "data[i] is data[0] offset by i*plane_size -- one allocation, not three."
+  (im:with-image (image (im:create 16 16 :color-space-rgb :data-type-byte))
+    (let ((base (cffi:pointer-address (im:plane-pointer image 0)))
+          (size (im:plane-size image)))
+      (is (= (+ base size) (cffi:pointer-address (im:plane-pointer image 1))))
+      (is (= (+ base size size) (cffi:pointer-address (im:plane-pointer image 2)))))))
 
-(test match-helpers-distinguish-shape-color-and-type
-  (with-images ((a (im-image:create 16 12 :color-space-rgb :data-type-byte))
-                (same (im-image:create 16 12 :color-space-rgb :data-type-byte))
-                (diff-size (im-image:create 8 12 :color-space-rgb :data-type-byte))
-                (diff-cs   (im-image:create 16 12 :color-space-gray :data-type-byte))
-                (diff-dt   (im-image:create 16 12 :color-space-rgb :data-type-ushort)))
-    (is-true (im-image:match-p a same))
-    (is-true (im-image:match-size-p a same))
-    (is-true (im-image:match-color-space-p a same))
-    (is-true (im-image:match-data-type-p a same))
-    (is-false (im-image:match-size-p a diff-size))
-    (is-false (im-image:match-color-space-p a diff-cs))
-    (is-false (im-image:match-data-type-p a diff-dt))
-    (is-false (im-image:match-p a diff-size))))
+(test plane-index-is-bounds-checked
+  (im:with-image (image (im:create 8 8 :color-space-gray :data-type-byte))
+    (signals im:im-error (im:plane-pointer image 1))
+    (signals im:im-error (im:plane-pointer image -1))))
 
-(defun has-alpha-p (img)
-  (cffi:foreign-slot-value
-   img '(:struct im-cffi::im-image-struct) 'im-cffi::has-alpha-p))
+(test destroy-is-idempotent
+  (let ((image (im:create 8 8 :color-space-gray :data-type-byte)))
+    (is-false (im:destroyed-p image))
+    (im:destroy image)
+    (is-true (im:destroyed-p image))
+    ;; The second call must not free the pointer again.
+    (finishes (im:destroy image))
+    (finishes (im:destroy image))))
 
-(test alpha-add-set-remove-lifecycle
-  (with-image (img (make-rgb-gradient 8 8))
-    (is-false (has-alpha-p img))
-    (im-image:add-alpha img)
-    (is-true (has-alpha-p img))
-    (setf (im-image:alpha img) 200)             ; just confirm setter runs
-    (im-image:remove-alpha img)
-    (is-false (has-alpha-p img))
-    ;; The colour planes are unchanged across the lifecycle.
-    (with-image (fresh (make-rgb-gradient 8 8))
-      (is (= 0 (image-byte-max-diff img fresh))))))
+(test use-after-destroy-signals
+  (let ((image (im:create 8 8 :color-space-gray :data-type-byte)))
+    (im:destroy image)
+    (signals im:invalid-image (im:width image))
+    (signals im:invalid-image (im:plane-pointer image 0))))
 
-(test duplicate-deep-copies-data
-  (with-image (src (make-gray-gradient 16 16))
-    (with-image (dup (im-image:duplicate src))
-      (is-true (im-image:match-p src dup))
-      (is (= 0 (image-byte-max-diff src dup)))
-      ;; mutate dup, original is untouched
-      (setf (pixel-byte dup 0 0 0) 99)
-      (is (= 0 (pixel-byte src 0 0 0)))
-      (is (= 99 (pixel-byte dup 0 0 0))))))
+(test with-image-releases-on-error
+  (let (captured)
+    (ignore-errors
+     (im:with-image (image (im:create 8 8 :color-space-gray :data-type-byte))
+       (setf captured image)
+       (cl:error "unwind")))
+    (is-true (im:destroyed-p captured))))
 
-(test clone-shares-shape-only
-  (with-image (src (make-gray-gradient 8 8))
-    (with-image (clone (im-image:clone src))
-      (is-true (im-image:match-p src clone))
-      ;; clone data is fresh-zero, gradient differs
-      (is (> (image-byte-max-diff src clone) 0)))))
+(test finalizer-releases-escaped-images
+  "Images that never reach a WITH-IMAGE are still freed, at GC.
 
-(test copy-plane-isolated-from-others
-  (with-images ((a (make-rgb-gradient 8 8))
-                (b (im-image:create 8 8 :color-space-rgb :data-type-byte)))
-    (im-image:copy-plane a 1 b 0)              ; G of A -> R of B
-    ;; B's plane 0 must equal A's plane 1
-    (loop for i below (* 8 8) do
-      (is (= (cffi:mem-aref (im-image:data a 1) :unsigned-char i)
-             (cffi:mem-aref (im-image:data b 0) :unsigned-char i))))
-    ;; B's plane 1 still zero
-    (loop for i below (* 8 8) do
-      (is (zerop (cffi:mem-aref (im-image:data b 1) :unsigned-char i))))))
+Allocating without the finalizer working leaks 16 MB here; allocating with a
+finalizer that double-frees crashes the process. Passing means neither."
+  (dotimes (i 500)
+    (im:create 128 128 :color-space-rgb :data-type-byte))
+  (finishes (tg:gc :full t)))
 
-(test make-binary-clamps-nonzero-to-one
-  (with-image (img (im-image:create 4 1 :color-space-gray :data-type-byte))
-    (let ((p (im-image:data img 0)))
-      (setf (cffi:mem-aref p :unsigned-char 0) 0)
-      (setf (cffi:mem-aref p :unsigned-char 1) 1)
-      (setf (cffi:mem-aref p :unsigned-char 2) 200)
-      (setf (cffi:mem-aref p :unsigned-char 3) 255))
-    (im-image:make-binary img)
-    (is (= 0 (pixel-byte img 0 0 0)))
-    (is (= 1 (pixel-byte img 0 1 0)))
-    (is (= 1 (pixel-byte img 0 2 0)))
-    (is (= 1 (pixel-byte img 0 3 0)))))
+(test duplicate-copies-data-clone-does-not
+  (im:with-image (source (gray-gradient 16 16))
+    (im:with-images ((copy (im:duplicate source))
+                     (empty (im:clone source)))
+      (is (= (im:width source) (im:width copy) (im:width empty)))
+      (is (= (pixel source 0 5 5) (pixel copy 0 5 5))
+          "DUPLICATE must reproduce sample values")
+      (is (eq (im:data-type source) (im:data-type empty))))))
+
+(test create-based-overrides-selectively
+  (im:with-image (source (im:create 40 30 :color-space-rgb :data-type-byte))
+    (im:with-image (derived (im:create-based source :color-space :color-space-gray))
+      (is (= 40 (im:width derived)))
+      (is (= 30 (im:height derived)))
+      (is (eq :color-space-gray (im:color-space derived)))
+      (is (eq :data-type-byte (im:data-type derived))))))

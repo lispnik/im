@@ -1,6 +1,16 @@
-*~
+# Build output. bin/im embeds an SBCL core, so it is ~12 MB and platform
+# specific; it is produced by `make', never committed.
+/bin/
+
+# Vendored dependencies. ocicl.csv pins them and `ocicl install' restores
+# them, so the tree itself is disposable.
+ocicl/
+
+# Compiled output, per implementation.
 *.fasl
 *.lx64fsl
 *.wx64fsl
-README.html
-ocicl/
+
+# Editor and platform droppings.
+*~
+.DS_Store

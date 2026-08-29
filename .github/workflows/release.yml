@@ -1,0 +1,269 @@
+name: Release
+
+# Tag a commit and push the tag to publish binaries:
+#
+#     git tag -a v0.4.0 -m 'im 0.4.0' && git push origin v0.4.0
+#
+# One executable per platform is attached to the GitHub Release. They are NOT
+# self-contained: bin/im embeds an SBCL core but still dlopens libim at
+# startup, so whoever runs it needs IM installed. That is stated in the release
+# notes rather than solved by bundling, because IM's own dependency closure --
+# libtiff, libjpeg, libpng, libexif, liblz4 and, per add-on, jasper, fftw3 and
+# libheif -- is most of an image toolchain, and every platform packages it.
+
+on:
+  push:
+    tags: ['v*']
+  # Lets a release be rebuilt without moving the tag, which matters when a
+  # single platform's job failed for an unrelated reason.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and publish'
+        required: true
+
+permissions:
+  contents: write        # gh release create
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Publish whatever platforms succeed. A missing Windows binary is worth
+      # having the other three for; cancelling them helps no one.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux amd64
+            os: ubuntu-24.04
+            asset: im-linux-amd64
+            im-artifact: im-libs-ubuntu-24.04
+            im-workflow: ci-linux.yml
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            asset: im-linux-arm64
+            im-artifact: im-libs-ubuntu-24.04-arm
+            im-workflow: ci-linux.yml
+          - name: macOS arm64
+            os: macos-15
+            asset: im-macos-arm64
+            im-artifact: im-libs-macos-15
+            im-workflow: ci-macos.yml
+          - name: Windows x64
+            os: windows-2022
+            asset: im-windows-x64.exe
+            im-artifact: im-libs-windows-2022
+            im-workflow: ci-windows.yml
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # A tag that disagrees with version.txt would ship a binary whose
+      # --version contradicts the release it is attached to. Cheaper to catch
+      # here than to explain later.
+      - name: Check the tag matches version.txt
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          expected="v$(tr -d '[:space:]' < version.txt)"
+          if [ "$tag" != "$expected" ]; then
+            echo "::error::tag $tag does not match version.txt ($expected)."
+            echo "Update version.txt, or tag $expected instead."
+            exit 1
+          fi
+          echo "Building $tag"
+
+      - name: Install SBCL (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends sbcl
+
+      - name: Install SBCL (macOS)
+        if: runner.os == 'macOS'
+        run: brew install sbcl
+
+      - name: Install SBCL (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install sbcl --no-progress -y
+          cygpath -w "/c/Program Files/Steel Bank Common Lisp" >> "$GITHUB_PATH"
+
+      # Needed to BUILD and smoke-test, not to ship: the binary is linked
+      # against nothing, but it loads libim at startup, so it cannot even print
+      # its version without one present.
+      - name: Install IM runtime dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            libtiff6 libjpeg8 libpng16-16 zlib1g libexif12 \
+            liblzf1 liblz4-1 libfftw3-double3 libfftw3-single3 libgomp1
+
+      - name: Install IM runtime dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libtiff jpeg-turbo libpng libexif liblzf lz4 fftw libomp
+
+      - name: Install and configure ocicl
+        run: |
+          git clone --depth 1 https://github.com/ocicl/ocicl.git "$HOME/ocicl-src"
+          ( cd "$HOME/ocicl-src" && sbcl --non-interactive --load setup.lisp )
+          bin="$(find "$HOME" -type f \( -name ocicl -o -name ocicl.exe \) 2>/dev/null \
+                   | grep -v '/ocicl-src/' | head -1)"
+          runtime="$(find "$HOME" -type f -name ocicl-runtime.lisp 2>/dev/null \
+                       | grep -v '/ocicl-src/' | head -1)"
+          test -n "$bin" && test -n "$runtime" || { echo "ocicl setup failed"; exit 1; }
+          dirname "$bin" >> "$GITHUB_PATH"
+          if [ "$RUNNER_OS" = Windows ]; then runtime="$(cygpath -m "$runtime")"; fi
+          echo "OCICL_RUNTIME=$runtime" >> "$GITHUB_ENV"
+
+      - name: Restore dependencies
+        run: |
+          ocicl setup
+          ocicl install
+
+      - name: Download IM libraries
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repo: lispnik/tecgraf-im
+          workflow: ${{ matrix.im-workflow }}
+          branch: master
+          name: ${{ matrix.im-artifact }}
+          path: im-libs/
+
+      - name: Keep only the IM libraries
+        run: |
+          find im-libs -mindepth 1 -maxdepth 1 \
+            ! -name 'libim*' ! -name 'im*.dll' -exec rm -rf {} + || true
+
+      # Upstream bakes absolute install names pointing at its own build
+      # directory; downloaded here those paths do not exist, so the
+      # inter-library references dangle. See the same step in ci.yml.
+      - name: Repair macOS install names
+        if: runner.os == 'macOS'
+        run: |
+          cd im-libs
+          for lib in libim*.dylib; do
+            install_name_tool -id "$PWD/$lib" "$lib"
+            for dep in libim*.dylib; do
+              install_name_tool -change \
+                "/Users/runner/work/tecgraf-im/tecgraf-im/build/lib/$dep" \
+                "$PWD/$dep" "$lib" 2>/dev/null || true
+            done
+          done
+
+      - name: Point the bindings at the libraries
+        run: |
+          libs="$PWD/im-libs"
+          case "$RUNNER_OS" in
+            Linux)   echo "LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH"     >> "$GITHUB_ENV" ;;
+            macOS)   echo "DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV" ;;
+            Windows) cygpath -w "$libs" >> "$GITHUB_PATH" ;;
+          esac
+          if [ "$RUNNER_OS" = Windows ]; then libs="$(cygpath -m "$libs")"; fi
+          echo "IM_LIBRARY_PATH=$libs" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          sbcl --non-interactive \
+            --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+            --eval '(asdf:make :im/cli)'
+
+      # ASDF appends .exe on Windows; everywhere else the name is bare. Locate
+      # it rather than assume, and fail loudly if the build produced nothing.
+      - name: Stage the asset
+        run: |
+          built="$(find bin -maxdepth 1 -type f \( -name im -o -name im.exe \) | head -1)"
+          test -n "$built" || { echo "::error::no binary in bin/"; exit 1; }
+          mkdir -p dist
+          cp "$built" "dist/${{ matrix.asset }}"
+          chmod +x "dist/${{ matrix.asset }}" || true
+          ls -lh dist/
+
+      # A binary that cannot run is not worth publishing. This is also the only
+      # check that the dumped image reopens its foreign libraries on restore --
+      # a failure here means the image-restore hook regressed.
+      - name: Verify the binary runs
+        run: |
+          ./dist/${{ matrix.asset }} --version
+          ./dist/${{ matrix.asset }} library
+          ./dist/${{ matrix.asset }} info tests/images/lena.jpg --json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: build
+    # Publish even if some platforms failed, as long as one produced a binary;
+    # `needs` alone would skip this whenever any matrix leg failed.
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Check something was built
+        run: |
+          ls -lR dist/
+          test -n "$(find dist -type f)" || {
+            echo "::error::every platform failed; nothing to publish"; exit 1; }
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+
+          cat > notes.md <<'EOF'
+          ## Installing
+
+          Download the binary for your platform, make it executable, and put it
+          on your PATH.
+
+          ## Requirements
+
+          These binaries embed an SBCL core but **do not bundle IM**. They load
+          `libim` and its add-ons at startup, so IM 3.15 must be installed:
+
+          - build [lispnik/tecgraf-im](https://github.com/lispnik/tecgraf-im), or
+          - install it through your package manager
+
+          Point the binary at a specific build with `IM_LIBRARY_PATH`, or place
+          the libraries in a `lib/` directory beside the executable. Run
+          `im library` to see which ones were found.
+
+          Optional add-ons — JPEG 2000, HEIF/AVIF and video capture — are off in
+          IM's default build. Without them those formats simply do not appear in
+          `im formats`.
+          EOF
+
+          # Recreate rather than fail when re-running a tag after fixing one
+          # platform's job.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag exists; replacing its assets."
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* \
+              --title "im $tag" \
+              --notes-file notes.md \
+              --verify-tag
+          fi

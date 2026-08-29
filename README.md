@@ -1,188 +1,184 @@
-# CFFI bindings to IM
+# im — Common Lisp bindings to the IM imaging toolkit
 
-## IM
+CFFI bindings to [IM](https://www.tecgraf.puc-rio.br/im/), Tecgraf's toolkit for
+image representation, storage, capture and processing, plus `im(1)`, a command
+line tool that drives them.
 
-IM is a toolkit for image representation, storage, capture and
-processing. For more information, refer to:
+This project is unaffiliated with Tecgraf.
 
-    http://webserver2.tecgraf.puc-rio.br/im/
+Built against [lispnik/tecgraf-im](https://github.com/lispnik/tecgraf-im), a
+CMake fork of IM 3.15. The bindings cover **456 C functions** — every function
+exported by `libim`, `libim_process`, `libim_capture`, `libim_fftw3` and the
+format add-ons, apart from a documented list of driver internals.
 
-    im@tecgraf.puc-rio.br
-   
-This project is unaffiliated with TecGraf.
+## Installing
 
-## Compatibility
+Prebuilt binaries for Linux (amd64 and arm64), macOS (Apple Silicon) and
+Windows are attached to each [release](https://github.com/lispnik/im/releases).
+They embed an SBCL core but do not bundle IM, so the shared libraries still
+have to be present -- see *Finding the libraries* below.
 
-IM 3.14
+## Building from source
 
-## Documentation
+- SBCL, and [ocicl](https://github.com/ocicl/ocicl) for dependencies
+- IM 3.15 shared libraries
 
-All exported symbols have docstrings, however you will need to refer
-to the library documentation http://webserver2.tecgraf.puc-rio.br/im/
-for concepts and further details.
-
-## Coverage
-
-IM is defined in four parts:
-
-- [x] Representation
-- [x] Storage¹
-- [x] Capture
-- [x] Processing²
-
-¹ except memory file support
-² CFFI bindings cover ~90% of the public im_process / im_analyze /
-im_calc surface; high-level Lisp wrappers are organised across
-the following packages:
-
-- `im-arithmetic` — unary/binary/bitwise/blend/tone-gamut ops
-- `im-convolve`   — Convolve, MeanConvolve, MedianConvolve, Sobel,
-                    Prewitt, Canny, Unsharp, etc.
-- `im-threshold`  — Threshold, Otsu, hysteresis, local-max, etc.
-- `im-color`      — ReplaceColor, FixBGR, PseudoColor, HSI split/merge,
-                    quantize, histogram equalize/expand
-- `im-morph`      — gray and binary morphology (erode/dilate/open/close,
-                    top-hat, well, gradient, thinning)
-- `im-geometric`  — Resize, Reduce, Rotate, Crop, AddMargins, Mirror,
-                    Flip, Radial / LensDistort
-- `im-render`     — Constant, Gaussian, Chessboard, Grid, AddNoise...
-- `im-analyze`    — FindRegions + MeasureArea / Perimeter / Centroid
-                    / Holes, FillHoles, RemoveByArea
-- `im-transform`  — FFT / IFFT / DistanceTransform / HoughLines /
-                    AutoCorrelation / CrossCorrelation
-- `im-calc`       — RMSError, SNR, CountColors, ImageStatistics, etc.
-
-## macOS notes
-
-The `:darwin` clauses in the foreign-library declarations look up
-`libim.dylib` and friends. After building the IM dylibs locally,
-their install_names embed `@rpath/libim.dylib`, which CFFI cannot
-resolve from SBCL. Rewrite them to absolute paths once per build:
-
-```
-cd /path/to/tecgraf/im && ./fix-install-names.sh
+```sh
+ocicl install          # restore the pinned dependencies
+make                   # build bin/im
+make test              # run the test suite
 ```
 
-The CFFI bindings also push `/Users/<you>/tecgraf/im/lib/MacOS264/`
-and `/opt/homebrew/lib/` onto `cffi:*foreign-library-directories*`
-when those directories exist; users with a different layout can
-`pushnew` their own path before loading the system.
+## Finding the libraries
 
-## CFFI deviations from the C API
+The bindings look for `libim` and its add-ons in this order:
 
-The CFFI bindings are for the most part a one-to-one mapping with the
-C API functions. The following are the deviations taken when binding
-the C API to Lisp:
+1. `im:*library-path*`, if set
+2. the `IM_LIBRARY_PATH` environment variable
+3. a `lib/` directory beside the running executable — the release layout
+4. `cffi:*foreign-library-directories*` and the platform's own search path
 
-* Lisp functions are spelled out completely
-
-* Bitfields and enumations are Lisp keywords.
-
-* The C API has a notion of a *color mode*, which is the bitwise OR of
-  a list of *color mode config* bit field options and a *color space*
-  enumeration. The Lisp API separates *color mode* into the individual
-  data types. e.g.
-  
-  Where the C API does:
-  
-  ```c
-  imImageDataSize(width, height, color_mode, data_type)
-  ```
-  
-  the Lisp API does:
-  
-  ```lisp
-  (im:image-data-size width height color-mode-config color-space data-type)
-  ```
-
-* C API setters translated into `setf` functions.
-
-* (non-deviation) Currently, the Lisp bindings provide raw data access
-  via a foreign pointer rather than provide convenient accessors. The
-  reason follows IM's own documentation:
-  
-    > As the library is designed to work with such a wide range of
-    > image data organization, there are no general purpose functions
-    > for getting/setting individual pixels, as they would be too
-    > complicated and inefficient. Rather, you should use the
-    > components of the imImage structure to access image pixels in
-    > the most efficient way.
-    
-  Refer to
-  http://webserver2.tecgraf.puc-rio.br/im/en/representation.html for
-  more information.
-
-## Examples
-
-Load the examples system with `(ql:quickload '("im" "im-examples"))`.
-
-### Device Capture
-
-[cheese.lisp](https://github.com/lispnik/im/blob/master/examples/cheese.lisp)
-
-Write an 8-bit, grayscale image using the first image capture
-device (which is probably a webcam) to a JPEG file.
-
-```
-CL-USER> (im-examples.cheese:cheese)
-Say CHEESE! (and press enter)
-
-capture-3756857502.jpg
-(COLOR-MODE-CONFIG-PACKED)
-COLOR-SPACE-GRAY
-DATA-TYPE-BYTE
-640x480
-NIL
+```sh
+IM_LIBRARY_PATH=/path/to/tecgraf-im/build/lib ./bin/im library
 ```
 
-### Image Copy
+`im library` reports the IM version and exactly which shared objects were
+opened, which is the fastest way to tell whether an add-on is present.
 
-[image-copy.lisp](https://github.com/lispnik/im/blob/master/examples/image-copy.lisp)
+Add-ons are optional. `libim_jp2`, `libim_heif` and `libim_capture` are all
+switched off in upstream's default build, and the bindings load without them —
+their formats simply do not appear in `im formats`.
 
-Load a JPEG image, convert to TIFF with LZW compression and write the
-output to file.
+## The command line tool
+
+```
+im info FILE...        format, dimensions, colour mode, attributes
+im formats             the registered formats and their compressions
+im convert IN OUT      format, compression, colour space or depth
+im process IN OUT      a pipeline of operations
+im analyze FILE        label connected regions and measure them
+im stats FILE          per-plane statistics and histograms
+im compare A B         RMS error and signal-to-noise ratio
+im capture             list capture devices, or grab a frame
+im library             IM version and the libraries in use
+```
+
+Every subcommand takes `--json`, which emits one JSON value:
+
+```sh
+im info photo.jpg --json | jq '.frames[0] | {width, height}'
+```
+
+Operations in `im process` are given as repeated `--op` arguments and applied
+**in the order written**, which is why they are not one flag each:
+
+```sh
+im process in.jpg out.png \
+    --op resize=50% --op colorspace=gray --op gaussian=1.5 --op sobel
+```
+
+`im process --list-ops` lists all twenty. Sizes accept `WxH`, `800x` or `x600`
+to preserve the aspect ratio, and `50%`.
+
+Exit codes are 0 for success, 1 for an IM error, 2 for a usage error and 130
+for an interrupt. Diagnostics go to stderr, so piping stdout to `jq` is safe.
+
+## The library
 
 ```lisp
-CL-USER> (im-examples.image-copy:image-copy
-          #p"/usr/share/backgrounds/Black_sand_beach_by_Mads_Rosendahl.jpg"
-          #p"/tmp/Black_sand_beach_by_Mads_Rosendahl.tif"
-          "TIFF"
-          "LZW")
-NIL
+(asdf:load-system :im)
+
+(im:with-image (photo (im:load #p"photo.jpg"))
+  (im:with-image (edges (im:create-based photo :color-space :color-space-gray))
+    (im:convolve-sobel photo edges)
+    (im:save edges #p"edges.png")))
 ```
 
-### Image Info
+### Images
 
-[image-info.lisp](https://github.com/lispnik/im/blob/master/examples/image-info.lisp)
+`im:image` is a CLOS object wrapping IM's `imImage`. Its storage is released by
+`im:destroy`, by `im:with-image` on unwind, or — for images that escape both —
+by a finalizer. `im:destroy` is idempotent and disarms the finalizer, so the
+two cannot race. Operating on a destroyed image signals `im:invalid-image`
+rather than reading freed memory.
 
-Return information about a JPEG image as an associative list.
+Pixel data is reached through `im:plane-pointer`, a raw foreign pointer. That
+is deliberate, and it is IM's own reasoning: the library supports so many data
+organisations that general-purpose per-pixel accessors would be both
+complicated and slow. Planes are always unpacked and stored bottom-up.
+
+### Conditions
+
+Every failure is a subtype of `im:im-error`, and each of IM's error codes has
+its own class, so causes are distinguished by handler rather than by testing a
+slot:
 
 ```lisp
-CL-USER> (im-examples.image-info:image-info #p"/usr/share/backgrounds/Morning_by_Bernhard_Hanakam.jpg")
-(:PATHNAME #P"/usr/share/backgrounds/Morning_by_Bernhard_Hanakam.jpg" :FORMAT
- "JPEG" :COMPRESSION "JPEG" :COUNT 1 :IMAGES
- ((:WIDTH 3840 :HEIGHT 2160 :COLOR-MODE
-   (:COLOR-SPACE :COLOR-SPACE-RGB :COLOR-MODE-CONFIG
-    (:COLOR-MODE-CONFIG-PACKED :COLOR-MODE-CONFIG-TOPDOWN))
-   :DATA-TYPE :DATA-TYPE-BYTE :DATA-SIZE 24883200 :ATTRIBUTES
-   (("YResolution" #(75.0) :DATA-TYPE-FLOAT 1)
-    ("FileFormat" #(74 80 69 71 0) :DATA-TYPE-BYTE 5)
-    ("Copyright" #(66 101 114 110 104 97 114 100 32 72 97 110 97 107 97 109 0)
-     :DATA-TYPE-BYTE 17)
-    ("XResolution" #(75.0) :DATA-TYPE-FLOAT 1)
-    ("FileImageCount" #(1) :DATA-TYPE-INT 1)
-    ("DateTime" #(50 48 49 56 58 48 57 58 50 56 32 49 51 58 50 54 58 48 53 0)
-     :DATA-TYPE-BYTE 20)
-    ("FlashPixVersion" #(48 49 48 48) :DATA-TYPE-BYTE 4)
-    ("FileCompression" #(74 80 69 71 0) :DATA-TYPE-BYTE 5)
-    ("ColorSpace" #(65535) :DATA-TYPE-USHORT 1)
-    ("ResolutionUnit" #(68 80 73 0) :DATA-TYPE-BYTE 4)
-    ("Software" #(71 73 77 80 32 50 46 49 48 46 54 0) :DATA-TYPE-BYTE 12)
-    ("ExifVersion" #(48 50 49 48) :DATA-TYPE-BYTE 4)
-    ("Interlaced" #(1) :DATA-TYPE-INT 1)
-    ("Artist" #(66 101 114 110 104 97 114 100 32 72 97 110 97 107 97 109 0)
-     :DATA-TYPE-BYTE 17)))))
+(handler-case (im:load path)
+  (im:open-error   (c) (format t "cannot open: ~A" (im:error-detail c)))
+  (im:format-error (c) (format t "unrecognised format")))
 ```
 
-**NOTE** No attempt is made to convert string attibutes. Use
-[Babel](https://github.com/cl-babel/babel) or similar.
+### Progress and cancellation
+
+A callback installed with `im:with-progress` is called as an operation runs and
+can stop it. Cancelling signals `im:operation-aborted` — a real error, not a
+silent NIL — and the operation offers `retry` and `continue` restarts:
+
+```lisp
+(im:with-progress ((lambda (id text percent)
+                     (declare (ignore id text))
+                     (< percent 500)))          ; stop halfway
+  (im:convolve-gaussian source destination 8.0))
+```
+
+## Layout
+
+| Path | Contents |
+|---|---|
+| `src/ffi/` | The raw bindings. Generated, then hand-corrected. **Do not add hand-written files here** — the generator clears it. |
+| `src/ffi-structs.lisp` | Hand-written C structs, kept outside the generated directory. |
+| `src/*.lisp` | The Lisp API: conditions, library loading, images, files, processing, capture. |
+| `src/cli/` | `im(1)`, one file per subcommand group. |
+| `tools/gen-bindings.lisp` | The binding generator. Not part of any shipped system. |
+
+### Regenerating the bindings
+
+```sh
+make bindings IM_SOURCE=/path/to/tecgraf-im
+```
+
+The generator takes its symbol list from `nm` on the **built libraries**, not
+from the headers, so it cannot bind a function that does not exist. Headers
+declare several that no library implements. It also emits
+`src/ffi/manifest.lisp`, which the test suite uses to check at runtime that
+every bound function resolves.
+
+Regenerating overwrites everything under `src/ffi/`. Run it into a clean tree
+and read the diff.
+
+## Deviations from the C API
+
+- Names are spelled out and hyphenated: `imFileOpen` → `im:load`,
+  `imProcessReduceBy4` → `im:resize`.
+- Enums and bitfields are keywords: `:color-space-rgb`, `:data-type-byte`.
+- IM packs a colour space and three configuration bits into one `int`; the
+  Lisp API keeps `im:color-space` and `im:color-mode-config` separate.
+- C setters become `setf` functions, and out-parameters become multiple values.
+
+## Notes
+
+`libim_jp2` prints a JasPer deprecation banner on startup. It comes from
+`jas_init` inside IM's JP2 driver, goes to stderr, and is harmless.
+
+`imProcessBitwiseOp`'s `:xor` is a true exclusive-or in this fork of IM;
+upstream's computed NOR, which is available here as `:nor`. Code ported from
+stock IM 3.15 changes behaviour silently.
+
+On macOS, `im capture` can enumerate devices from a terminal but connecting to
+one requires `NSCameraUsageDescription` in an application bundle. Without it
+the process is killed by TCC rather than being allowed to fail.
+
+## License
+
+MIT. See LICENSE.
