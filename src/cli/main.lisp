@@ -55,11 +55,25 @@ after the libraries are open would have no effect, and silently so."
       (im:load-libraries))))
 
 (defun already-loaded-from-p (directory)
-  "True when libim was loaded from DIRECTORY."
-  (let ((loaded (im:library-pathname 'im::lib-im)))
-    (and loaded
-         (equal (uiop:ensure-directory-pathname (truename directory))
-                (uiop:pathname-directory-pathname (truename loaded))))))
+  "True when libim was demonstrably loaded from DIRECTORY.
+
+NIL when that cannot be established, which includes the case that matters:
+CFFI reports whatever it was asked to open, so a library found by search is
+recorded under its bare soname -- \"libim.so\" -- and not as a path. TRUENAME
+on that signals SIMPLE-FILE-ERROR rather than returning NIL, and because this
+runs from APPLY-GLOBAL-OPTIONS before any subcommand does its work, it killed
+every invocation of the binary on Linux with a file error naming a library in
+the current directory.
+
+Being wrong in the NIL direction costs one redundant reload. Signalling costs
+the whole program, so everything here is guarded."
+  (ignore-errors
+   (let* ((loaded (im:library-pathname 'im::lib-im))
+          (from (and loaded (uiop:truename* loaded)))
+          (want (uiop:truename* directory)))
+     (and from want
+          (equal (uiop:ensure-directory-pathname want)
+                 (uiop:pathname-directory-pathname from))))))
 
 (defun top-level/handler (command)
   (clingon:print-usage-and-exit command *standard-output*))

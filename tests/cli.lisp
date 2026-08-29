@@ -110,3 +110,30 @@ before strings turns \"JPEG\" into [\"J\",\"P\",\"E\",\"G\"]."
       (declare (ignore out))
       (is (= 2 code))
       (is (search "nosuchop" err)))))
+
+;;; Library-path handling -----------------------------------------------------
+
+(def-suite cli-library-suite :in im-suite
+  :description "How the CLI resolves --im-library, in process.")
+(in-suite cli-library-suite)
+
+(test already-loaded-from-p-tolerates-a-bare-soname
+  "CFFI records what it was asked to open, not always a path.
+
+A library found by search is recorded under its bare soname on Linux --
+\"libim.so\" -- and TRUENAME on that signals rather than returning NIL. This
+check runs before any subcommand does its work, so signalling here killed
+every invocation of the binary on Linux with a file error naming a library in
+the current directory. Answering NIL is fine; raising is not."
+  (let ((im::*loaded* (make-hash-table :test #'eq)))
+    (setf (gethash 'im::lib-im im::*loaded*) "libim.so")
+    (finishes (im.cli::already-loaded-from-p "/tmp"))
+    (is (null (im.cli::already-loaded-from-p "/tmp"))))
+  ;; A directory that does not exist must not signal either.
+  (finishes (im.cli::already-loaded-from-p "/nonexistent/directory")))
+
+(test already-loaded-from-p-recognises-a-real-match
+  (let ((path (im:library-pathname 'im::lib-im)))
+    (when (and path (uiop:truename* path))
+      (let ((dir (uiop:pathname-directory-pathname (uiop:truename* path))))
+        (is-true (im.cli::already-loaded-from-p (namestring dir)))))))

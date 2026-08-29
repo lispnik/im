@@ -110,7 +110,10 @@
                (:file "conditions")
                (:file "process")
                (:file "cli"))
-  :depends-on (#:im #:fiveam #:trivial-garbage #:shasht)
+  ;; im/cli as well as im: the suite drives bin/im as a subprocess, and also
+  ;; checks a couple of the CLI's own functions directly, which needs the
+  ;; package to exist at compile time.
+  :depends-on (#:im #:im/cli #:fiveam #:trivial-garbage #:shasht)
   ;; FiveAM's RUN! prints its report and returns NIL when anything failed.
   ;; Discarding that value makes TEST-OP succeed on a failing suite, which is
   ;; how this project's CI once went green with three tests failing.
