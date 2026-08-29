@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 env:
-  IM_VERSION: v2.0.0
+  IM_VERSION: v2.0.1
 
 jobs:
   test:
