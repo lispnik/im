@@ -3,12 +3,18 @@
 (in-package #:im.cli)
 
 (defparameter *program-version*
-  ;; Read at compile time from the single source of truth, so `im --version'
-  ;; cannot drift from the version ASDF reports for the system.
-  #.(string-trim '(#\Space #\Newline #\Return #\Tab)
-                 (uiop:read-file-line
-                  (asdf:system-relative-pathname "im" "version.txt")))
-  "The version of this tool, taken from version.txt at build time.")
+  ;; Asked of ASDF at LOAD time, which is the only point where the answer is
+  ;; both available and current. Reading version.txt at compile time with #.
+  ;; looked equivalent and was not: nothing tells ASDF that this file depends
+  ;; on version.txt, so bumping the version left a valid cached fasl in place
+  ;; and the rebuilt binary confidently reported the previous version.
+  ;;
+  ;; A top-level form runs on every load, cached fasl or not, and a dumped
+  ;; image captures whatever it computed -- so the executable carries the
+  ;; right string without needing version.txt beside it at runtime.
+  (or (ignore-errors (asdf:component-version (asdf:find-system "im/cli")))
+      "unknown")
+  "The version of this tool, from the ASDF system definition.")
 
 (define-condition usage-error (cl:error)
   ((text :initarg :text :reader usage-error-text))

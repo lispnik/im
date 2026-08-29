@@ -21,7 +21,11 @@ IM_SOURCE ?= ../../tecgraf/tecgraf-im
 BOOT := --eval "(require :asdf)" \
         --eval "(asdf:initialize-source-registry \`(:source-registry (:tree ,(truename \"./\")) :ignore-inherited-configuration))"
 
-SRC := im.asd $(wildcard src/*.lisp) $(wildcard src/ffi/*.lisp) $(wildcard src/cli/*.lisp)
+# version.txt belongs here: im.asd reads it for the system version, and the
+# CLI takes `im --version' from that. Leave it out and a version bump does not
+# rebuild, so the binary keeps reporting the previous one.
+SRC := im.asd version.txt \
+       $(wildcard src/*.lisp) $(wildcard src/ffi/*.lisp) $(wildcard src/cli/*.lisp)
 BIN := bin/im
 
 .PHONY: all test bindings clean help
