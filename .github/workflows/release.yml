@@ -53,7 +53,7 @@ jobs:
             im-workflow: ci-macos.yml
           - name: Windows x64
             os: windows-2022
-            asset: im-windows-x64.exe
+            asset: im-windows-x64.zip
             im-artifact: im-libs-windows-2022
             im-workflow: ci-windows.yml
 
@@ -202,18 +202,58 @@ jobs:
           built="$(find bin -maxdepth 1 -type f \( -name im -o -name im.exe \) | head -1)"
           test -n "$built" || { echo "::error::no binary in bin/"; exit 1; }
           mkdir -p dist
-          cp "$built" "dist/${{ matrix.asset }}"
-          chmod +x "dist/${{ matrix.asset }}" || true
-          ls -lh dist/
+
+          if [ "$RUNNER_OS" = Windows ]; then
+            # Windows ships IM alongside the executable, because there is no
+            # way for a user to obtain a matching IM otherwise: the DLLs are
+            # linked against vcpkg's libtiff, libjpeg and zlib, and the builds
+            # chocolatey or MSYS2 provide do not satisfy them.
+            #
+            # Flat, not bin/ + lib/. When Windows loads im.dll it resolves
+            # im.dll's OWN dependencies against the directory of the running
+            # executable, not against the directory im.dll came from. Split
+            # them and im.dll is found and then fails to load, which is the
+            # error this bundling exists to prevent.
+            stage="dist/im-windows-x64"
+            mkdir -p "$stage"
+            cp "$built" "$stage/im.exe"
+            cp im-libs/*.dll "$stage/"
+            echo "bundled:"; ls -la "$stage/"
+          else
+            cp "$built" "dist/${{ matrix.asset }}"
+            chmod +x "dist/${{ matrix.asset }}" || true
+            ls -lh dist/
+          fi
 
       # A binary that cannot run is not worth publishing. This is also the only
       # check that the dumped image reopens its foreign libraries on restore --
       # a failure here means the image-restore hook regressed.
       - name: Verify the binary runs
         run: |
-          ./dist/${{ matrix.asset }} --version
-          ./dist/${{ matrix.asset }} library
-          ./dist/${{ matrix.asset }} info tests/images/lena.jpg --json
+          if [ "$RUNNER_OS" = Windows ]; then
+            # Deliberately with IM_LIBRARY_PATH cleared and from inside the
+            # bundle. That is the whole claim being tested: this directory is
+            # self-sufficient on a machine that has never heard of IM. Leaving
+            # the variable set would have the binary find the build tree
+            # instead and prove nothing.
+            images="$PWD/tests/images"
+            cd dist/im-windows-x64
+            env -u IM_LIBRARY_PATH ./im.exe --version
+            env -u IM_LIBRARY_PATH ./im.exe library
+            env -u IM_LIBRARY_PATH ./im.exe info "$images/lena.jpg" --json
+          else
+            ./dist/${{ matrix.asset }} --version
+            ./dist/${{ matrix.asset }} library
+            ./dist/${{ matrix.asset }} info tests/images/lena.jpg --json
+          fi
+
+      - name: Zip the Windows bundle
+        if: runner.os == 'Windows'
+        run: |
+          cd dist
+          7z a -tzip im-windows-x64.zip im-windows-x64 >/dev/null
+          rm -rf im-windows-x64
+          ls -lh
 
       - uses: actions/upload-artifact@v4
         with:
@@ -267,11 +307,12 @@ jobs:
           [lispnik/tecgraf-im](https://github.com/lispnik/tecgraf-im), or install
           IM through your package manager if it offers 3.15.
 
-          On **Windows** you must build lispnik/tecgraf-im yourself, against
-          vcpkg. There is no package to install: IM's Windows DLLs are linked
-          against vcpkg's builds of libtiff, libjpeg and zlib, and the ones
-          chocolatey or MSYS2 provide do not match, so `im.dll` will not load
-          beside them.
+          **Windows needs nothing installed.** `im-windows-x64.zip` contains
+          IM and its dependencies beside the executable; unzip it and run
+          `im.exe`. It is bundled because there is no package a user could
+          install instead: IM's Windows DLLs are linked against vcpkg's builds
+          of libtiff, libjpeg and zlib, and the ones chocolatey or MSYS2
+          provide do not satisfy them.
 
           Point the binary at a build with `IM_LIBRARY_PATH`, or put the
           libraries in a `lib/` directory beside the executable. Run

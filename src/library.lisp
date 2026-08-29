@@ -148,20 +148,34 @@ and is more useful than refusing to load the system at all.")
 
 ;;; Discovery -----------------------------------------------------------------
 
-(defun %executable-library-directory ()
-  "The lib/ directory beside this executable, when there is one.
+(defun %executable-library-directories ()
+  "Directories to search relative to this executable, nearest first.
 
-This is the release tarball layout -- bin/im and lib/libim.so -- and it is
-what makes the shipped binary self-contained without an environment variable.
-Returns NIL when running from source, where argv[0] is the Lisp itself."
+Two layouts, because the platforms want different ones:
+
+  <exedir>/          everything in one directory. This is what a Windows
+                     bundle has to look like: im.dll depends on tiff.dll and
+                     the rest, and when a DLL is loaded by path Windows
+                     resolves ITS dependencies against the directory of the
+                     running executable, not against the directory the DLL
+                     came from. Anything else and im.dll is found but will
+                     not load.
+
+  <exedir>/../lib/   bin/im beside lib/libim.so, which is the tidier shape
+                     where the loader cooperates.
+
+Both are checked, so one binary works with either. Returns NIL when running
+from source, where argv[0] is the Lisp itself and neither exists."
   (let ((argv0 (ignore-errors (uiop:argv0))))
     (when argv0
       (let* ((exe (ignore-errors (uiop:truename* argv0)))
              (dir (when exe (uiop:pathname-directory-pathname exe))))
         (when dir
-          (let ((lib (uiop:merge-pathnames* #p"../lib/" dir)))
-            (when (uiop:directory-exists-p lib)
-              (uiop:truename* lib))))))))
+          (remove nil
+                  (list (uiop:truename* dir)
+                        (let ((lib (uiop:merge-pathnames* #p"../lib/" dir)))
+                          (when (uiop:directory-exists-p lib)
+                            (uiop:truename* lib))))))))))
 
 (defun %search-directories ()
   "Directories to look in, most specific first.
@@ -171,11 +185,12 @@ version's list of /Users/mkennedy/tecgraf/... paths made this system load on
 one machine and fail everywhere else, and the failure looked like a missing
 library rather than a wrong assumption."
   (remove nil
-          (list (when *library-path* (uiop:ensure-directory-pathname *library-path*))
-                (let ((env (uiop:getenv "IM_LIBRARY_PATH")))
-                  (when (and env (plusp (length env)))
-                    (uiop:ensure-directory-pathname env)))
-                (%executable-library-directory))))
+          (append (list (when *library-path*
+                          (uiop:ensure-directory-pathname *library-path*))
+                        (let ((env (uiop:getenv "IM_LIBRARY_PATH")))
+                          (when (and env (plusp (length env)))
+                            (uiop:ensure-directory-pathname env))))
+                  (%executable-library-directories))))
 
 (defparameter *library-basenames*
   '((lib-im             . "im")

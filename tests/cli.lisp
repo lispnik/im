@@ -137,3 +137,64 @@ the current directory. Answering NIL is fine; raising is not."
     (when (and path (uiop:truename* path))
       (let ((dir (uiop:pathname-directory-pathname (uiop:truename* path))))
         (is-true (im.cli::already-loaded-from-p (namestring dir)))))))
+
+;;; The bundled layout ---------------------------------------------------------
+
+(in-suite cli-suite)
+
+(defun im-library-directory ()
+  "The directory the IM shared libraries were loaded from, or NIL.
+
+Prefers IM_LIBRARY_PATH, because what CFFI reports can be a bare soname
+rather than a path."
+  (let ((env (uiop:getenv "IM_LIBRARY_PATH")))
+    (or (when (and env (plusp (length env)))
+          (uiop:truename* (uiop:ensure-directory-pathname env)))
+        (let ((loaded (im:library-pathname 'im::lib-im)))
+          (when loaded
+            (let ((truename (uiop:truename* loaded)))
+              (when truename (uiop:pathname-directory-pathname truename))))))))
+
+(test bundled-layout-is-self-sufficient
+  "A binary sitting beside its libraries runs with no environment help.
+
+This is exactly what the Windows release ships, and it has to be flat rather
+than bin/ + lib/: when Windows loads im.dll it resolves im.dll's own
+dependencies against the directory of the running executable, not against the
+directory im.dll came from.
+
+Run with IM_LIBRARY_PATH cleared, which is the point -- with it set the binary
+would find the build tree and this would prove nothing."
+  (with-cli
+    (let ((source (im-library-directory)))
+      (if (null source)
+          (skip "cannot locate the IM libraries to copy")
+          (let* ((bundle (uiop:ensure-directory-pathname (tmp-file "bundle/")))
+                 (libraries (append (directory (merge-pathnames "libim*.*" source))
+                                    (directory (merge-pathnames "im*.dll" source)))))
+            (if (null libraries)
+                (skip "no IM libraries found beside ~A" source)
+                (progn
+                  (ensure-directories-exist bundle)
+                  (let ((executable (merge-pathnames "im" bundle)))
+                    (uiop:copy-file *binary* executable)
+                    ;; The copy loses the mode bits.
+                    (uiop:run-program (list "chmod" "+x" (namestring executable))
+                                      :ignore-error-status t)
+                    (dolist (library libraries)
+                      (uiop:copy-file library (merge-pathnames (file-namestring library)
+                                                               bundle)))
+                    (multiple-value-bind (out err code)
+                        (uiop:run-program (list (namestring executable) "library")
+                                          :output :string :error-output :string
+                                          :ignore-error-status t
+                                          ;; Clear the variable for the child only.
+                                          :environment
+                                          (remove-if (lambda (entry)
+                                                       (uiop:string-prefix-p
+                                                        "IM_LIBRARY_PATH=" entry))
+                                                     (sb-ext:posix-environ)))
+                      (declare (ignore err))
+                      (is (zerop code)
+                          "a binary beside its libraries must run unaided")
+                      (is (search "im version" out)))))))))))
