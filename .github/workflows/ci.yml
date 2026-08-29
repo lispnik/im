@@ -141,10 +141,24 @@ jobs:
       # demo programs, the Lua modules, and on macOS an .app bundle. Keeping
       # them would not break anything, but the directory goes on the library
       # search path and is worth having contain only libraries.
-      - name: Keep only the IM libraries
+      - name: Drop the non-libraries from the artifact
         run: |
+          # build/lib/ upstream holds more than libraries: the test binary, the
+          # demo programs, the Lua modules, and on macOS an .app bundle. Remove
+          # those by name.
+          #
+          # Emphatically NOT an allowlist of libim*: on Windows the artifact
+          # also carries IM's vcpkg dependencies -- tiff.dll, jpeg62.dll,
+          # zlib1.dll and the rest -- because that is the one platform where
+          # they cannot be installed separately to match. Keeping only im*
+          # deleted every one of them, and im.dll then failed to load with the
+          # unhelpfully generic "Error opening shared object", the file having
+          # been found but its dependencies not.
           find im-libs -mindepth 1 -maxdepth 1 \
-            ! -name 'libim*' ! -name 'im*.dll' -exec rm -rf {} + || true
+            \( -name 'im_tests*' -o -name 'document_enhance*' \
+               -o -name 'imlua*' -o -name '*.app' \
+               -o -name 'im_capture_grab*' \) \
+            -exec rm -rf {} + || true
           ls -la im-libs/
 
       # Upstream builds macOS dylibs with absolute install names pointing at

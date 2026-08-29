@@ -138,10 +138,16 @@ jobs:
           name: ${{ matrix.im-artifact }}
           path: im-libs/
 
-      - name: Keep only the IM libraries
+      - name: Drop the non-libraries from the artifact
         run: |
+          # Not an allowlist of libim*: on Windows the artifact also carries
+          # IM's vcpkg dependencies (tiff.dll, jpeg62.dll, zlib1.dll, ...),
+          # which cannot be installed separately to match. See ci.yml.
           find im-libs -mindepth 1 -maxdepth 1 \
-            ! -name 'libim*' ! -name 'im*.dll' -exec rm -rf {} + || true
+            \( -name 'im_tests*' -o -name 'document_enhance*' \
+               -o -name 'imlua*' -o -name '*.app' \
+               -o -name 'im_capture_grab*' \) \
+            -exec rm -rf {} + || true
 
       # Upstream bakes absolute install names pointing at its own build
       # directory; downloaded here those paths do not exist, so the
