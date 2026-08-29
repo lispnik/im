@@ -144,22 +144,29 @@ jobs:
       - name: Drop the non-libraries from the artifact
         run: |
           # build/lib/ upstream holds more than libraries: the test binary, the
-          # demo programs, the Lua modules, and on macOS an .app bundle. Remove
-          # those by name.
+          # demo programs, the Lua modules, and on macOS an .app bundle. This
+          # directory goes on the library search path, so it should contain
+          # libraries and nothing else.
           #
-          # Emphatically NOT an allowlist of libim*: on Windows the artifact
-          # also carries IM's vcpkg dependencies -- tiff.dll, jpeg62.dll,
-          # zlib1.dll and the rest -- because that is the one platform where
-          # they cannot be installed separately to match. Keeping only im*
-          # deleted every one of them, and im.dll then failed to load with the
-          # unhelpfully generic "Error opening shared object", the file having
-          # been found but its dependencies not.
+          # Filtered by FILE TYPE rather than by name, and that is the whole
+          # point. An allowlist of libim* deleted IM's vcpkg dependencies on
+          # Windows -- tiff.dll, jpeg62.dll, zlib1.dll -- which is the one
+          # platform where they cannot be installed separately to match, and
+          # im.dll then failed to load with a generic "Error opening shared
+          # object", the file having been found but its dependencies not. A
+          # denylist of known executables fixed that but fails OPEN: upstream
+          # demonstrably grows programs here (document_enhance_v2 appeared
+          # beside document_enhance), and the next one would be shipped and put
+          # on the search path with nothing warning. Keeping only things that
+          # are shared libraries fails closed and still keeps the vcpkg DLLs.
+          #
+          # imlua* are genuine shared libraries, so they survive the type test
+          # and are named explicitly.
           find im-libs -mindepth 1 -maxdepth 1 \
-            \( -name 'im_tests*' -o -name 'document_enhance*' \
-               -o -name 'imlua*' -o -name '*.app' \
-               -o -name 'im_capture_grab*' \) \
+            \( ! -name '*.so' ! -name '*.so.*' ! -name '*.dylib' ! -name '*.dll' \
+               -o -name 'imlua*' \) \
             -exec rm -rf {} + || true
-          ls -la im-libs/
+          echo "kept:"; ls -la im-libs/
 
       # Upstream builds macOS dylibs with absolute install names pointing at
       # ITS OWN build directory -- deliberately, because that makes them

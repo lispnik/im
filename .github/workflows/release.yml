@@ -140,14 +140,17 @@ jobs:
 
       - name: Drop the non-libraries from the artifact
         run: |
-          # Not an allowlist of libim*: on Windows the artifact also carries
-          # IM's vcpkg dependencies (tiff.dll, jpeg62.dll, zlib1.dll, ...),
-          # which cannot be installed separately to match. See ci.yml.
+          # Keep shared libraries and nothing else, by file type. See the long
+          # note on the same step in ci.yml: a name-based allowlist deleted the
+          # vcpkg DLLs IM needs on Windows, and a name-based denylist fails
+          # open as upstream adds programs. The listing matters here -- this is
+          # the job that produced the opaque "Error opening shared object", and
+          # its log said nothing about what had survived the prune.
           find im-libs -mindepth 1 -maxdepth 1 \
-            \( -name 'im_tests*' -o -name 'document_enhance*' \
-               -o -name 'imlua*' -o -name '*.app' \
-               -o -name 'im_capture_grab*' \) \
+            \( ! -name '*.so' ! -name '*.so.*' ! -name '*.dylib' ! -name '*.dll' \
+               -o -name 'imlua*' \) \
             -exec rm -rf {} + || true
+          echo "kept:"; ls -la im-libs/
 
       # Upstream bakes absolute install names pointing at its own build
       # directory; downloaded here those paths do not exist, so the
@@ -258,14 +261,21 @@ jobs:
           ## Requirements
 
           These binaries embed an SBCL core but **do not bundle IM**. They load
-          `libim` and its add-ons at startup, so IM 3.15 must be installed:
+          `libim` and its add-ons at startup, so IM 3.15 must be present.
 
-          - build [lispnik/tecgraf-im](https://github.com/lispnik/tecgraf-im), or
-          - install it through your package manager
+          On **Linux and macOS**, build
+          [lispnik/tecgraf-im](https://github.com/lispnik/tecgraf-im), or install
+          IM through your package manager if it offers 3.15.
 
-          Point the binary at a specific build with `IM_LIBRARY_PATH`, or place
-          the libraries in a `lib/` directory beside the executable. Run
-          `im library` to see which ones were found.
+          On **Windows** you must build lispnik/tecgraf-im yourself, against
+          vcpkg. There is no package to install: IM's Windows DLLs are linked
+          against vcpkg's builds of libtiff, libjpeg and zlib, and the ones
+          chocolatey or MSYS2 provide do not match, so `im.dll` will not load
+          beside them.
+
+          Point the binary at a build with `IM_LIBRARY_PATH`, or put the
+          libraries in a `lib/` directory beside the executable. Run
+          `im library` to see which were found and where.
 
           Optional add-ons — JPEG 2000, HEIF/AVIF and video capture — are off in
           IM's default build. Without them those formats simply do not appear in
