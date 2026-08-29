@@ -170,10 +170,20 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then libs="$(cygpath -m "$libs")"; fi
           echo "IM_LIBRARY_PATH=$libs" >> "$GITHUB_ENV"
 
+          # Where ASDF should look for im.asd and the vendored ocicl/ tree.
+          # Without this nothing finds the system at all: ASDF has no reason to
+          # look in the checkout, and it only appeared to work locally because
+          # a developer's ~/.sbclrc trees their projects directory. Same
+          # incantation as the Makefile, so CI and `make' agree.
+          tree="$PWD"
+          if [ "$RUNNER_OS" = Windows ]; then tree="$(cygpath -m "$tree")"; fi
+          echo "LISP_TREE=$tree" >> "$GITHUB_ENV"
+
       - name: Build
         run: |
           sbcl --non-interactive \
-            --eval "(unless (member :ocicl *features*) (load \"$OCICL_RUNTIME\"))" \
+            --eval '(require :asdf)' \
+            --eval "(asdf:initialize-source-registry '(:source-registry (:tree \"$LISP_TREE\") :ignore-inherited-configuration))" \
             --eval '(asdf:make :im/cli)'
 
       # ASDF appends .exe on Windows; everywhere else the name is bare. Locate
