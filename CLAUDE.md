@@ -133,6 +133,14 @@ order decide.
   spec needs the symbol `png`, so `im:display` interns it there; the obvious
   `:png` arrives as a keyword, `find-image` compares with `memq`, and the
   image silently never renders.
+- **SBCL's floating-point traps are not on everywhere.** `(coerce 1d300
+  'single-float)` signals `floating-point-overflow` on macOS arm64, Linux
+  amd64 and Windows, and returns an infinity on Linux arm64. Range-check
+  against `most-positive-single-float` rather than catching the trap —
+  CI is the only place the difference shows up.
+- **`find-symbol` signals when its package designator names nothing**, unlike
+  `find-package`. Probing for an optional package (`swank`, `slynk`) must
+  lead with `find-package`, or the probe is the crash.
 - **SLY's `eval-in-emacs` must be sent with `nowait`.** Emacs checks
   `sly-enable-evaluate-in-emacs` in the event dispatcher, outside the handler
   that turns an error into a return value, so the blocking form waits forever

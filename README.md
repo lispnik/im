@@ -126,10 +126,13 @@ are read from a file with `im:attributes`, and set on an image — which is what
 ```
 
 The data type is inferred as the narrowest one that holds the value exactly —
-byte for a string, int for integers, double for other reals, cdouble for
-complex numbers — and `:data-type` overrides it. A value that will not fit the
-type is an error rather than a truncation; `(setf (im:image-attribute ...) nil)`
-removes the attribute.
+byte for a string, int for integers, double for floats, cdouble for complex
+numbers — and `:data-type` overrides it. A value that will not fit the type is
+an error rather than a truncation, and so is a ratio, which no IM type holds
+exactly; `(setf (im:image-attribute ...) nil)` removes the attribute.
+
+Byte attributes do not round-trip as vectors: IM stores text in them, so
+`#(65 66)` reads back as `"AB"`.
 
 What survives the write is the format's decision. PNG keeps `"Author"`; TIFF
 has no tag for it and drops it silently. Read the file back rather than
