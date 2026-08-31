@@ -107,6 +107,34 @@ is deliberate, and it is IM's own reasoning: the library supports so many data
 organisations that general-purpose per-pixel accessors would be both
 complicated and slow. Planes are always unpacked and stored bottom-up.
 
+### Attributes
+
+Images carry named metadata, and formats store what they recognise. Attributes
+are read from a file with `im:attributes`, and set on an image — which is what
+`im:save` writes out — with `im:set-image-attribute` or `setf`:
+
+```lisp
+(im:with-image (photo (im:load #p"photo.jpg"))
+  (setf (im:image-attribute photo "Author") "Ada Lovelace")
+  (im:set-image-attribute photo "Levels" #(1 2 3))          ; stored as int
+  (im:set-image-attribute photo "Gamma" 2.2d0)              ; stored as double
+  (im:set-image-attribute photo "Small" 200 :data-type :data-type-byte)
+  (im:save photo #p"tagged.png"))
+
+(im:attribute #p"tagged.png" "Author")
+;; => ("Ada Lovelace" :DATA-TYPE-BYTE 13)
+```
+
+The data type is inferred as the narrowest one that holds the value exactly —
+byte for a string, int for integers, double for other reals, cdouble for
+complex numbers — and `:data-type` overrides it. A value that will not fit the
+type is an error rather than a truncation; `(setf (im:image-attribute ...) nil)`
+removes the attribute.
+
+What survives the write is the format's decision. PNG keeps `"Author"`; TIFF
+has no tag for it and drops it silently. Read the file back rather than
+assuming.
+
 ### Conditions
 
 Every failure is a subtype of `im:im-error`, and each of IM's error codes has

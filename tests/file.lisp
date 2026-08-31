@@ -32,6 +32,87 @@
       (is (stringp (first (cdr format))))
       (is (string= "JPEG" (first (cdr format)))))))
 
+(test image-attributes-round-trip-every-type
+  "Each imDataType survives being set and read back on an image."
+  (im:with-image (image (im:create 4 4 :color-space-rgb :data-type-byte))
+    (setf (im:image-attribute image "Author") "Ada")
+    (im:set-image-attribute image "Exposure" 250)
+    (im:set-image-attribute image "Gamma" 2.2d0)
+    (im:set-image-attribute image "Levels" #(1 2 3))
+    (im:set-image-attribute image "Small" 200 :data-type :data-type-byte)
+    (im:set-image-attribute image "Wave" (vector #C(1.0 2.0))
+                            :data-type :data-type-cfloat)
+    (is (string= "Ada" (im:image-attribute image "Author")))
+    (is (equalp #(250) (im:image-attribute image "Exposure")))
+    (is (equalp #(2.2d0) (im:image-attribute image "Gamma")))
+    (is (equalp #(1 2 3) (im:image-attribute image "Levels")))
+    ;; A byte attribute of one non-printable value is data, not text.
+    (is (equalp #(200) (im:image-attribute image "Small")))
+    ;; Complex attributes are pairs of adjacent parts in C. Decoding them as
+    ;; bytes -- which is what happened before -- gives plausible small
+    ;; integers rather than an error.
+    (is (equalp (vector #C(1.0 2.0)) (im:image-attribute image "Wave")))
+    (multiple-value-bind (value type count) (im:image-attribute image "Levels")
+      (declare (ignore value))
+      (is (eq :data-type-int type))
+      (is (= 3 count)))))
+
+(test image-attribute-data-types-are-inferred-narrowly
+  (im:with-image (image (im:create 4 4 :color-space-rgb :data-type-byte))
+    (dolist (spec '(("i" 7 :data-type-int)
+                    ("r" 1.5d0 :data-type-double)
+                    ("c" #C(1d0 1d0) :data-type-cdouble)))
+      (destructuring-bind (name value type) spec
+        (im:set-image-attribute image name value)
+        (is (eq type (nth-value 1 (im:image-attribute image name)))
+            "~S should be stored as ~S" value type)))))
+
+(test image-attributes-lists-what-was-set
+  (im:with-image (image (im:create 4 4 :color-space-rgb :data-type-byte))
+    (im:set-image-attribute image "One" 1)
+    (im:set-image-attribute image "Two" 2)
+    (let ((attributes (im:image-attributes image)))
+      (is (= 2 (length attributes)))
+      (is (equalp #(1) (first (cdr (assoc "One" attributes :test #'string=))))))))
+
+(test setting-an-image-attribute-to-nil-removes-it
+  (im:with-image (image (im:create 4 4 :color-space-rgb :data-type-byte))
+    (setf (im:image-attribute image "Author") "Ada")
+    (is-true (im:image-attribute image "Author"))
+    (setf (im:image-attribute image "Author") nil)
+    (is (null (im:image-attribute image "Author")))
+    (is (null (im:image-attributes image)))))
+
+(test image-attributes-reject-values-they-cannot-store-exactly
+  "Every one of these is a silent corruption if it is allowed through."
+  (im:with-image (image (im:create 4 4 :color-space-rgb :data-type-byte))
+    ;; Wraps to 44 in a byte cell.
+    (signals im:data-error
+      (im:set-image-attribute image "x" 300 :data-type :data-type-byte))
+    ;; No IM integer type is wider than 32 bits; a double would round it.
+    (signals im:data-error (im:set-image-attribute image "x" (expt 2 40)))
+    (signals im:data-error
+      (im:set-image-attribute image "x" "text" :data-type :data-type-int))
+    (signals im:data-error (im:set-image-attribute image "x" #(1 "two")))
+    ;; Zero values is IM's spelling of removal, and saying so beats storing
+    ;; an attribute that reads back as absent.
+    (signals im:data-error (im:set-image-attribute image "x" #()))))
+
+(test image-attributes-reach-the-file
+  "An attribute set on an image is written by SAVE -- if the format knows it.
+
+PNG keeps \"Author\". TIFF has no tag for it and drops it without a word, which
+is the caveat in SET-IMAGE-ATTRIBUTE's docstring and the reason to read a file
+back rather than assume: the two calls here differ only in the extension."
+  (im:with-image (image (im:load (image-file "lena.jpg")))
+    (setf (im:image-attribute image "Author") "Ada Lovelace")
+    (let ((png (tmp-file "authored.png"))
+          (tiff (tmp-file "authored.tif")))
+      (im:save image png)
+      (im:save image tiff)
+      (is (equal '("Ada Lovelace" :data-type-byte 13) (im:attribute png "Author")))
+      (is (null (im:attribute tiff "Author"))))))
+
 (test round-trip-through-several-formats
   (im:with-image (source (im:load (image-file "lena.jpg")))
     (dolist (spec '(("rt.png" . "PNG") ("rt.tif" . "TIFF") ("rt.bmp" . "BMP")))

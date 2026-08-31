@@ -126,10 +126,13 @@ order decide.
 - **`imProcessIFFT` needs both images complex** and segfaults otherwise, so the
   wrappers check preconditions IM documents but does not enforce.
 - **`~v,0T` divides by zero** on SBCL when colinc is 0.
+- **An attribute a format does not recognise is dropped silently.** PNG stores
+  `"Author"`, TIFF does not — it has no tag for it and says nothing. Read the
+  file back rather than trusting the write.
 
 ## Tests
 
-`tests/`, one file per area, 188 checks. Beyond the obvious coverage they
+`tests/`, one file per area, 224 checks. Beyond the obvious coverage they
 assert the things that previously went untested: the condition hierarchy, the
 restart protocol, finalizer and double-destroy behaviour, that every binding
 resolves against the loaded libraries, and — by running `bin/im` as a
