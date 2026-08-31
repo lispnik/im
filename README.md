@@ -135,6 +135,28 @@ What survives the write is the format's decision. PNG keeps `"Author"`; TIFF
 has no tag for it and drops it silently. Read the file back rather than
 assuming.
 
+### Displaying an image in the REPL
+
+`im:display` writes a PNG and asks the attached editor to show it:
+
+```lisp
+(im:with-image (photo (im:load #p"photo.jpg"))
+  (im:display photo))
+```
+
+One thing has to be set up on the Emacs side, and neither can be checked from
+Lisp:
+
+| Front end | Prerequisite | Where the image appears |
+|---|---|---|
+| SLY | `(setq sly-enable-evaluate-in-emacs t)` | an `*im-image*` buffer |
+| SLIME | `(slime-setup '(slime-media))` | inline, as the REPL result |
+
+Both are one-way messages, so a missing prerequisite is reported by Emacs, not
+here. With nothing attached at all — a bare REPL, a script — `im:display`
+signals `im:display-unavailable` rather than writing a file no one will look
+at. Bind `im:*display-function*` to render somewhere else.
+
 ### Conditions
 
 Every failure is a subtype of `im:im-error`, and each of IM's error codes has

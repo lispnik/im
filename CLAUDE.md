@@ -129,6 +129,14 @@ order decide.
 - **An attribute a format does not recognise is dropped silently.** PNG stores
   `"Author"`, TIFF does not — it has no tag for it and says nothing. Read the
   file back rather than trusting the write.
+- **SWANK prints wire messages in its own `swank-io-package`.** An Emacs image
+  spec needs the symbol `png`, so `im:display` interns it there; the obvious
+  `:png` arrives as a keyword, `find-image` compares with `memq`, and the
+  image silently never renders.
+- **SLY's `eval-in-emacs` must be sent with `nowait`.** Emacs checks
+  `sly-enable-evaluate-in-emacs` in the event dispatcher, outside the handler
+  that turns an error into a return value, so the blocking form waits forever
+  when the option is at its default.
 
 ## Tests
 
@@ -137,6 +145,10 @@ assert the things that previously went untested: the condition hierarchy, the
 restart protocol, finalizer and double-destroy behaviour, that every binding
 resolves against the loaded libraries, and — by running `bin/im` as a
 subprocess — that the dumped image reopens its libraries.
+
+`tests/display.lisp` binds `im:*display-function*` in every test. Without it,
+running the suite from inside a SLY session would send image buffers to the
+person running it.
 
 The `test-op` deliberately errors when `fiveam:run!` returns NIL. Discarding
 that value is how this project's CI once went green with three failing tests.

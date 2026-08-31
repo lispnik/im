@@ -34,6 +34,7 @@
           invalid-image-object
           library-not-found
           library-not-found-candidates
+          display-unavailable
           operation-aborted
           operation-aborted-operation
           operation-aborted-progress
@@ -200,6 +201,22 @@ callers a bare foreign pointer, so the same mistake read freed memory.")
                              ~%Set IM_LIBRARY_PATH to the directory holding it."
                      (error-detail c)
                      (library-not-found-candidates c)))))
+
+(define-condition display-unavailable (im-error) ()
+  (:documentation
+   "IM:DISPLAY found nothing able to show an image.
+
+The PNG was written -- ERROR-DETAIL names it -- but no front end was listening:
+no SLY or SLIME connection in this thread, and no IM:*DISPLAY-FUNCTION*. An
+error rather than a quiet return, because the alternative is a caller who
+believes an image is on screen somewhere.")
+  (:report (lambda (c stream)
+             (format stream "No REPL front end to display an image in~
+                             ~@[; it was written to ~A~].~%~
+                             SLY needs sly-enable-evaluate-in-emacs set to t; ~
+                             SLIME needs the slime-media contrib.~%~
+                             Bind IM:*DISPLAY-FUNCTION* to display it another way."
+                     (error-detail c)))))
 
 ;;; Capture -------------------------------------------------------------------
 ;;;

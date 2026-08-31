@@ -53,6 +53,8 @@
                (:file "image")
                (:file "counter")
                (:file "file")
+               ;; After file.lisp: DISPLAY writes the image out with SAVE.
+               (:file "display")
                (:file "process")
                (:file "capture"))
   :depends-on (#:cffi
@@ -108,6 +110,7 @@
                (:file "image")
                (:file "file")
                (:file "conditions")
+               (:file "display")
                (:file "process")
                (:file "cli"))
   ;; im/cli as well as im: the suite drives bin/im as a subprocess, and also
