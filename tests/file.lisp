@@ -114,15 +114,21 @@
 escaping from COERCE broke it for two of these."
   (im:with-image (image (im:create 4 4 :color-space-rgb :data-type-byte))
     (dolist (bad (list (list #C(1.0 2.0) :data-type-double)
+                       ;; Out of single-float range. Not a trap: SBCL signals
+                       ;; on some platforms and returns an infinity on others.
                        (list 1d300 :data-type-float)
+                       (list (expt 10 400) :data-type-double)
                        (list 300 :data-type-byte)
                        (list "text" :data-type-int)))
       (destructuring-bind (value type) bad
-        (handler-case (progn (im:set-image-attribute image "x" value :data-type type)
-                             (fail "~S as ~S was accepted" value type))
-          (im:im-error () (pass))
-          (error (c) (fail "~S as ~S signalled ~A, not an IM:IM-ERROR"
-                           value type (type-of c))))))))
+        (let ((outcome (handler-case
+                           (progn (im:set-image-attribute image "x" value
+                                                          :data-type type)
+                                  :accepted)
+                         (im:im-error () :im-error)
+                         (error (c) (type-of c)))))
+          (is (eq :im-error outcome)
+              "~S as ~S gave ~S, wanted an IM:IM-ERROR" value type outcome))))))
 
 (test image-attributes-reach-the-file
   "An attribute set on an image is written by SAVE -- if the format knows it.

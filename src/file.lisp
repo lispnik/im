@@ -375,6 +375,18 @@ both outside the IM-ERROR hierarchy a caller wraps attribute writes in."
                                    a ~(~A~) cell holds one at a time -- ask ~
                                    for a complex data type to store both parts"
                               name value type)))
+  ;; Range-checked rather than trapped. COERCE signals FLOATING-POINT-OVERFLOW
+  ;; on the platforms where SBCL enables the traps and quietly returns an
+  ;; infinity on the ones where it does not -- arm64 Linux among them, which is
+  ;; where CI caught this after the trap-based version passed everywhere else.
+  ;; An infinity in an attribute is not a value any format can write back.
+  (let ((limit (ecase type
+                 (single-float most-positive-single-float)
+                 (double-float most-positive-double-float))))
+    (unless (<= (abs value) limit)
+      (cl:error 'data-error
+                :detail (format nil "attribute ~A: ~S is out of range for ~(~A~)"
+                                name value type))))
   (handler-case (coerce value type)
     (arithmetic-error ()
       (cl:error 'data-error
