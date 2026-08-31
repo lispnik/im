@@ -53,24 +53,51 @@ once and reused for the life of the process.")
             (format nil "~36R" (random (expt 36 8) (make-random-state t))))))
 
 (defun %display-directory ()
-  (or *display-directory*
-      (merge-pathnames (format nil "im-display-~A/" (%display-session))
-                       (uiop:temporary-directory))))
+  "Where to write, always as a directory pathname.
+
+*DISPLAY-DIRECTORY* is normalised rather than used as given: #p\"/tmp/shots\"
+has \"shots\" as its NAME, so MERGE-PATHNAMES would replace it and the PNGs
+would land in /tmp -- where the history sweep would then delete files nobody
+nominated."
+  (uiop:ensure-directory-pathname
+   (or *display-directory*
+       (merge-pathnames (format nil "im-display-~A/" (%display-session))
+                        (uiop:temporary-directory)))))
 
 (defun %next-display-file ()
-  "A fresh PNG pathname, with the oldest of the previous ones deleted.
+  "A PNG pathname nothing else holds, with older ones swept away.
 
-Fresh rather than reused because Emacs caches images by their spec, and a
-second image written to the same path shows the first one again."
-  (let* ((directory (%display-directory))
-         (n (incf *display-counter*))
-         (path (merge-pathnames (format nil "image-~D.png" n) directory)))
-    (ensure-directories-exist path)
-    (let ((old (merge-pathnames (format nil "image-~D.png" (- n *display-history*))
-                                directory)))
-      (when (probe-file old)
-        (ignore-errors (delete-file old))))
-    path))
+Fresh rather than reused because Emacs caches images by their spec: a second
+image written to the same path shows the first one again.
+
+The name is claimed by creating the file, not by incrementing the counter.
+INCF is three operations, so two threads -- or two Lisps sharing a directory --
+can be handed the same number, and the loser's image is overwritten while
+Emacs may be part way through reading it. :IF-EXISTS NIL settles that where it
+is actually decided, in the filesystem."
+  (let ((directory (%display-directory)))
+    (ensure-directories-exist directory)
+    (loop for n = (incf *display-counter*)
+          for path = (merge-pathnames (format nil "image-~D.png" n) directory)
+          for stream = (open path :direction :output
+                                  :if-does-not-exist :create :if-exists nil)
+          when stream
+            do (close stream)
+               (%sweep-display-directory directory n)
+               (return path))))
+
+(defun %sweep-display-directory (directory newest)
+  "Delete every PNG in DIRECTORY older than *DISPLAY-HISTORY* images.
+
+By number rather than by one fixed offset per call: lowering *DISPLAY-HISTORY*
+or moving *DISPLAY-DIRECTORY* would otherwise strand every file the old offset
+had already stepped past, for the life of the machine."
+  (let ((limit (- newest *display-history*)))
+    (when (plusp limit)
+      (dolist (file (ignore-errors (directory (merge-pathnames "image-*.png" directory))))
+        (let ((n (ignore-errors (parse-integer (pathname-name file) :start 6))))
+          (when (and n (<= n limit))
+            (ignore-errors (delete-file file))))))))
 
 ;;; Front ends ----------------------------------------------------------------
 
@@ -135,9 +162,14 @@ package arrives on the other side as `png' and nothing else. NIL if this
 SWANK does not have such a package, in which case there is no way to name an
 image type and the backend declines rather than sending a spec Emacs will
 drop on the floor."
-  (let ((package (find-symbol "*SWANK-IO-PACKAGE*" '#:swank)))
-    (when (and package (boundp package) (packagep (symbol-value package)))
-      (intern name (symbol-value package)))))
+  ;; FIND-PACKAGE first, and not only for tidiness: FIND-SYMBOL signals a
+  ;; PACKAGE-ERROR when its designator names no package, so probing for a
+  ;; SWANK that was never loaded is itself the crash -- in the bare REPL this
+  ;; backend exists to decline politely in.
+  (let* ((swank (find-package '#:swank))
+         (symbol (and swank (find-symbol "*SWANK-IO-PACKAGE*" swank))))
+    (when (and symbol (boundp symbol) (packagep (symbol-value symbol)))
+      (intern name (symbol-value symbol)))))
 
 (defun %slime-display (pathname label)
   "Show PATHNAME under SLIME, or NIL when SLIME is not attached here.
@@ -157,7 +189,7 @@ a PNG."
 
 ;;; -----------------------------------------------------------------------------
 
-(defun display (image &key pathname (format "PNG"))
+(defun display (image &key pathname format)
   "Show IMAGE in the editor attached to this Lisp. Returns IMAGE.
 
 The second value names the front end that was used: :SLY, :SLIME, or whatever
@@ -180,10 +212,11 @@ know about -- this signals DISPLAY-UNAVAILABLE rather than quietly writing a
 file no one will look at.
 
 PATHNAME writes the image somewhere specific instead of to a temporary file
-that DISPLAY later cleans up; FORMAT is for a front end that wants something
-other than PNG."
+that DISPLAY later cleans up, and its extension chooses the format -- naming a
+file .jpg and getting PNG bytes in it helps nobody. FORMAT overrides that, and
+is what the temporary file uses, where there is no extension to read."
   (let ((path (or pathname (%next-display-file))))
-    (save image path :format format)
+    (save image path :format (or format (and (null pathname) "PNG")))
     (let* ((label (prin1-to-string image))
            (backend (if *display-function*
                         (funcall *display-function* image path)

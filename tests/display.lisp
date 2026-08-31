@@ -73,3 +73,70 @@ normally there would leave the caller believing an image is on screen."
       (let ((files (directory (merge-pathnames "*.png" im:*display-directory*))))
         (is (<= (length files) 4)
             "~D files left behind with a history of 3" (length files))))))
+
+(test display-without-a-front-end-signals-rather-than-crashing
+  "The bare-REPL path, with no *DISPLAY-FUNCTION* to short-circuit the probes.
+
+Every other test here binds that hook, which is what let an unguarded
+FIND-SYMBOL through review: probing for a SWANK that was never loaded signals
+a PACKAGE-ERROR, so DISPLAY crashed in exactly the situation
+DISPLAY-UNAVAILABLE exists to report."
+  (if (or (find-package '#:swank) (find-package '#:slynk))
+      (skip "a REPL front end is loaded in this image")
+      (with-display-directory
+        (im:with-image (image (gray-gradient 4 4))
+          (signals im:display-unavailable (im:display image))))))
+
+(test display-backend-probes-tolerate-a-missing-package
+  "FIND-SYMBOL signals on a package designator that names nothing; FIND-PACKAGE
+does not. Every probe has to lead with the latter."
+  (is (null (im::%attached-p '#:no-such-package-here)))
+  (is (null (im::%external-symbol-function '#:no-such-package-here "ANYTHING")))
+  (finishes (im::%swank-image-type "PNG")))
+
+(test display-directory-without-a-trailing-slash-is-still-a-directory
+  "#p\"/tmp/shots\" names a FILE to MERGE-PATHNAMES, so an unnormalised value
+wrote the PNGs into the parent -- and pointed the history sweep at it."
+  (let* ((directory (tmp-file "display-bare"))
+         (written nil)
+         (im:*display-directory* directory)
+         (im:*display-function* (lambda (image pathname)
+                                  (declare (ignore image))
+                                  (setf written pathname)
+                                  :test-harness)))
+    (uiop:delete-directory-tree (uiop:ensure-directory-pathname directory)
+                                :validate t :if-does-not-exist :ignore)
+    (im:with-image (image (gray-gradient 4 4))
+      (im:display image))
+    (is (equal (pathname-directory (uiop:ensure-directory-pathname directory))
+               (pathname-directory written))
+        "wrote to ~A, outside the directory it was given" written)))
+
+(test display-takes-the-format-from-an-explicit-pathname
+  "Naming a file .tif and getting PNG bytes in it helps nobody."
+  (let ((path (tmp-file "explicit-format.tif"))
+        (im:*display-function* (lambda (image pathname)
+                                 (declare (ignore image pathname))
+                                 :test-harness)))
+    (im:with-image (image (gray-gradient 4 4))
+      (im:display image :pathname path)
+      (is (string= "TIFF" (getf (im:file-info path) :format)))
+      ;; ...and FORMAT still wins where the caller asks for it.
+      (im:display image :pathname path :format "PNG")
+      (is (string= "PNG" (getf (im:file-info path) :format))))))
+
+(test lowering-the-history-sweeps-what-it-has-passed
+  "Deleting one fixed offset per call stranded every file the offset had
+already stepped past, permanently."
+  (with-display-directory
+    (let ((im:*display-function* (lambda (image pathname)
+                                   (declare (ignore image pathname))
+                                   :test-harness)))
+      (im:with-image (image (gray-gradient 4 4))
+        (let ((im:*display-history* 8))
+          (dotimes (i 8) (im:display image)))
+        (let ((im:*display-history* 2))
+          (im:display image)))
+      (let ((files (directory (merge-pathnames "*.png" im:*display-directory*))))
+        (is (<= (length files) 3)
+            "~D files left after lowering the history to 2" (length files))))))

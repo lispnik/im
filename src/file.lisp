@@ -316,7 +316,11 @@ plausible-looking, and wrong."
                                  name value)))))
 
 (defun %infer-data-type (name values)
-  "The narrowest imDataType that stores every element of VALUES exactly."
+  "The narrowest imDataType that stores every element of VALUES.
+
+Exactly, for everything IM has a type for. A ratio is the exception it cannot
+have one for -- 1/3 becomes a double and is no longer 1/3 -- so it is named
+here rather than left for the caller to notice in a file."
   (cond ((every #'integerp values)
          (if (every (lambda (v) (typep v '(signed-byte 32))) values)
              :data-type-int
@@ -328,14 +332,30 @@ plausible-looking, and wrong."
                                        name (find-if-not
                                              (lambda (v) (typep v '(signed-byte 32)))
                                              values)))))
-        ((every #'realp values) :data-type-double)
+        ((every (lambda (v) (and (realp v) (not (and (rationalp v) (not (integerp v))))))
+                values)
+         :data-type-double)
+        ((every #'realp values)
+         (cl:error 'data-error
+                   :detail (format nil "attribute ~A: no IM type holds ~S ~
+                                        exactly -- pass a float, or ~
+                                        :data-type :data-type-double to round it"
+                                   name (find-if (lambda (v)
+                                                   (and (rationalp v)
+                                                        (not (integerp v))))
+                                                 values))))
         ((every #'numberp values) :data-type-cdouble)
         (t (cl:error 'data-error
                      :detail (format nil "attribute ~A: ~S is not a number"
                                      name (find-if-not #'numberp values))))))
 
 (defun %attribute-cell (name c-type value)
-  "VALUE as something CFFI can store in one C-TYPE cell."
+  "VALUE as something CFFI can store in one C-TYPE cell.
+
+Every rejection here is a DATA-ERROR. The float branches used to hand the
+value straight to COERCE, which reports a complex as a CL:TYPE-ERROR and an
+out-of-range magnitude as a FLOATING-POINT-OVERFLOW -- both real errors, and
+both outside the IM-ERROR hierarchy a caller wraps attribute writes in."
   (let ((limits (cdr (assoc c-type *attribute-integer-limits*))))
     (cond (limits
            (unless (and (integerp value) (<= (car limits) value (cdr limits)))
@@ -345,8 +365,21 @@ plausible-looking, and wrong."
                                        name value c-type
                                        (car limits) (cdr limits))))
            value)
-          ((eq c-type :float) (coerce value 'single-float))
-          (t (coerce value 'double-float)))))
+          ((eq c-type :float) (%float-attribute-cell name value 'single-float))
+          (t (%float-attribute-cell name value 'double-float)))))
+
+(defun %float-attribute-cell (name value type)
+  (unless (realp value)
+    (cl:error 'data-error
+              :detail (format nil "attribute ~A: ~S is not a real number, and ~
+                                   a ~(~A~) cell holds one at a time -- ask ~
+                                   for a complex data type to store both parts"
+                              name value type)))
+  (handler-case (coerce value type)
+    (arithmetic-error ()
+      (cl:error 'data-error
+                :detail (format nil "attribute ~A: ~S is out of range for ~(~A~)"
+                                name value type)))))
 
 (defun %encode-attribute (name pointer type values)
   "Write VALUES into POINTER as cells of TYPE."
@@ -410,7 +443,12 @@ what it looks like.
 What survives SAVE is the format's business: each one stores the attributes it
 understands and drops the rest, and IM checks nothing here. A misspelled name
 is written to the image and quietly missing from the file, so confirm with
-ATTRIBUTES on the file rather than assuming."
+ATTRIBUTES on the file rather than assuming.
+
+Byte attributes do not round-trip as vectors. IM stores text in them and the
+reader hands text back, so #(65 66) written here reads as \"AB\" -- write a
+string when it is one, and expect one back for any byte vector that happens to
+look like printable ASCII."
   (cond
     ((null value)
      (remove-attribute image name))

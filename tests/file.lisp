@@ -96,7 +96,33 @@
     (signals im:data-error (im:set-image-attribute image "x" #(1 "two")))
     ;; Zero values is IM's spelling of removal, and saying so beats storing
     ;; an attribute that reads back as absent.
-    (signals im:data-error (im:set-image-attribute image "x" #()))))
+    (signals im:data-error (im:set-image-attribute image "x" #()))
+    ;; A complex needs a complex type: half of it would be dropped silently.
+    (signals im:data-error
+      (im:set-image-attribute image "x" #C(1.0 2.0) :data-type :data-type-double))
+    ;; Out of range for the cell asked for.
+    (signals im:data-error
+      (im:set-image-attribute image "x" 1d300 :data-type :data-type-float))
+    ;; No IM type holds 1/3, and rounding it into a double without saying so
+    ;; contradicts what the inference promises.
+    (signals im:data-error (im:set-image-attribute image "x" 1/3))
+    ;; Asked for explicitly, rounding is the caller's decision to make.
+    (finishes (im:set-image-attribute image "x" 1/3 :data-type :data-type-double))))
+
+(test attribute-failures-are-all-im-errors
+  "The hierarchy is the promise; CL:TYPE-ERROR and FLOATING-POINT-OVERFLOW
+escaping from COERCE broke it for two of these."
+  (im:with-image (image (im:create 4 4 :color-space-rgb :data-type-byte))
+    (dolist (bad (list (list #C(1.0 2.0) :data-type-double)
+                       (list 1d300 :data-type-float)
+                       (list 300 :data-type-byte)
+                       (list "text" :data-type-int)))
+      (destructuring-bind (value type) bad
+        (handler-case (progn (im:set-image-attribute image "x" value :data-type type)
+                             (fail "~S as ~S was accepted" value type))
+          (im:im-error () (pass))
+          (error (c) (fail "~S as ~S signalled ~A, not an IM:IM-ERROR"
+                           value type (type-of c))))))))
 
 (test image-attributes-reach-the-file
   "An attribute set on an image is written by SAVE -- if the format knows it.
