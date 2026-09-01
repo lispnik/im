@@ -27,10 +27,16 @@ second value -- or NIL to say the image could not be shown, which DISPLAY
 reports as DISPLAY-UNAVAILABLE.")
 
 (defvar *display-directory* nil
-  "Where DISPLAY writes its PNGs, or NIL for a per-process temporary directory.")
+  "Where DISPLAY writes its images, or NIL for a per-process temporary one.
+
+DISPLAY also deletes from this directory, so what it may delete is worth being
+precise about: every file it writes is named im-<session>-<n>.<ext>, where
+<session> is unique to this process, and the sweep only ever considers that
+prefix. Point this at a directory of your own and nothing already in it is
+touched.")
 
 (defvar *display-history* 8
-  "How many of DISPLAY's PNGs to keep on disk.
+  "How many of DISPLAY's images to keep on disk.
 
 Not zero, and not one: the front end reads the file after DISPLAY has
 returned, so the file it was just handed cannot be deleted yet.")
@@ -64,8 +70,34 @@ nominated."
        (merge-pathnames (format nil "im-display-~A/" (%display-session))
                         (uiop:temporary-directory)))))
 
-(defun %next-display-file ()
-  "A PNG pathname nothing else holds, with older ones swept away.
+(defparameter *emacs-image-types*
+  '(("png"  . "PNG")
+    ("jpg"  . "JPEG") ("jpeg" . "JPEG")
+    ("tif"  . "TIFF") ("tiff" . "TIFF")
+    ("gif"  . "GIF"))
+  "Filename extension to the name of the Emacs image type symbol.
+
+Emacs compares image types with MEMQ against `image-types', so a format absent
+from this table has no spelling %SLIME-DISPLAY can be sure of and it declines
+rather than send one Emacs will fail to match -- silently, which is the whole
+failure mode this table exists to avoid.")
+
+(defun %display-extension (format)
+  "The filename extension an IM format should be written under.
+
+From *EXTENSION-FORMATS*, the table SAVE guesses with, so the file's name says
+what is actually in it. Naming JPEG bytes .png is not cosmetic here: the SLIME
+backend takes the image type from the extension, and Emacs would be told to
+read a PNG that is not one."
+  (or (car (rassoc format *extension-formats* :test #'string=))
+      (string-downcase format)))
+
+(defun %display-file-prefix ()
+  "The prefix every file this process writes shares, and the only one it sweeps."
+  (format nil "im-~A-" (%display-session)))
+
+(defun %next-display-file (extension)
+  "An image pathname nothing else holds, with older ones swept away.
 
 Fresh rather than reused because Emacs caches images by their spec: a second
 image written to the same path shows the first one again.
@@ -75,27 +107,39 @@ INCF is three operations, so two threads -- or two Lisps sharing a directory --
 can be handed the same number, and the loser's image is overwritten while
 Emacs may be part way through reading it. :IF-EXISTS NIL settles that where it
 is actually decided, in the filesystem."
-  (let ((directory (%display-directory)))
+  (let ((directory (%display-directory))
+        (prefix (%display-file-prefix)))
     (ensure-directories-exist directory)
     (loop for n = (incf *display-counter*)
-          for path = (merge-pathnames (format nil "image-~D.png" n) directory)
+          for path = (merge-pathnames (format nil "~A~D.~A" prefix n extension)
+                                      directory)
           for stream = (open path :direction :output
                                   :if-does-not-exist :create :if-exists nil)
           when stream
             do (close stream)
-               (%sweep-display-directory directory n)
+               (%sweep-display-directory directory prefix n)
                (return path))))
 
-(defun %sweep-display-directory (directory newest)
-  "Delete every PNG in DIRECTORY older than *DISPLAY-HISTORY* images.
+(defun %sweep-display-directory (directory prefix newest)
+  "Delete this process's own images in DIRECTORY beyond *DISPLAY-HISTORY*.
 
-By number rather than by one fixed offset per call: lowering *DISPLAY-HISTORY*
-or moving *DISPLAY-DIRECTORY* would otherwise strand every file the old offset
-had already stepped past, for the life of the machine."
+Its own, by PREFIX. The sweep used to match image-<n>.png and delete anything
+that fit, which is a fine rule for a directory it made and a data-loss bug for
+the one a user nominates: *DISPLAY-COUNTER* starts at zero each process, so the
+first call steps past whatever files are already there and then reaps the ones
+it stepped over. A directory seeded with twelve image-<n>.png files lost five
+of them to a single DISPLAY call.
+
+By number rather than by one fixed offset per call, too: lowering
+*DISPLAY-HISTORY* or moving *DISPLAY-DIRECTORY* would otherwise strand every
+file the old offset had already stepped past, for the life of the machine."
   (let ((limit (- newest *display-history*)))
     (when (plusp limit)
-      (dolist (file (ignore-errors (directory (merge-pathnames "image-*.png" directory))))
-        (let ((n (ignore-errors (parse-integer (pathname-name file) :start 6))))
+      (dolist (file (ignore-errors
+                     (directory (merge-pathnames (format nil "~A*.*" prefix)
+                                                 directory))))
+        (let ((n (ignore-errors (parse-integer (pathname-name file)
+                                               :start (length prefix)))))
           (when (and n (<= n limit))
             (ignore-errors (delete-file file))))))))
 
@@ -112,9 +156,11 @@ that matters, since a background thread has nowhere to send an event."
       (let ((symbol (find-symbol "*EMACS-CONNECTION*" package)))
         (and symbol (boundp symbol) (symbol-value symbol) t)))))
 
-(defun %external-symbol-function (package-name symbol-name)
-  "The function named PACKAGE-NAME:SYMBOL-NAME, or NIL if there is no such
-function loaded."
+(defun %loaded-symbol-function (package-name symbol-name)
+  "The function PACKAGE-NAME::SYMBOL-NAME names, or NIL if it is not loaded.
+
+Internal symbols included -- SEND-TO-EMACS and EVAL-IN-EMACS are internal to
+their packages, so a search restricted to external ones would find neither."
   (let ((package (find-package package-name)))
     (when package
       (let ((symbol (find-symbol symbol-name package)))
@@ -143,7 +189,7 @@ The blocking form waits for Emacs to return a value, and Emacs checks
 that turns an error into that return -- so with the option at its default NIL,
 waiting means waiting forever. Not waiting costs the confirmation and gives
 the user a legible error in Emacs instead of a wedged REPL."
-  (let ((eval-in-emacs (%external-symbol-function '#:slynk "EVAL-IN-EMACS")))
+  (let ((eval-in-emacs (%loaded-symbol-function '#:slynk "EVAL-IN-EMACS")))
     (when (and eval-in-emacs (%attached-p '#:slynk))
       (funcall eval-in-emacs (%emacs-display-form pathname label) t)
       :sly)))
@@ -178,12 +224,17 @@ drop on the floor."
 Emacs image specs -- what FIND-IMAGE takes -- not a single spec. LABEL is the
 text the image stands in for, and what a caller sees where Emacs cannot render
 a PNG."
-  (let ((send-to-emacs (%external-symbol-function '#:swank "SEND-TO-EMACS"))
-        (png (%swank-image-type "PNG")))
-    (when (and send-to-emacs png (%attached-p '#:swank))
+  (let* ((send-to-emacs (%loaded-symbol-function '#:swank "SEND-TO-EMACS"))
+         ;; From the file's own extension, not from a hardcoded png: DISPLAY
+         ;; can be asked for another format, and telling Emacs that JPEG bytes
+         ;; are a PNG is the same silent non-render as sending it a keyword.
+         (name (cdr (assoc (string-downcase (or (pathname-type pathname) ""))
+                           *emacs-image-types* :test #'string=)))
+         (type (and name (%swank-image-type name))))
+    (when (and send-to-emacs type (%attached-p '#:swank))
       (funcall send-to-emacs
                (list :write-image
-                     (list (list :type png :file (namestring pathname)))
+                     (list (list :type type :file (namestring pathname)))
                      label))
       :slime)))
 
@@ -215,8 +266,9 @@ PATHNAME writes the image somewhere specific instead of to a temporary file
 that DISPLAY later cleans up, and its extension chooses the format -- naming a
 file .jpg and getting PNG bytes in it helps nobody. FORMAT overrides that, and
 is what the temporary file uses, where there is no extension to read."
-  (let ((path (or pathname (%next-display-file))))
-    (save image path :format (or format (and (null pathname) "PNG")))
+  (let* ((format (or format (and (null pathname) "PNG")))
+         (path (or pathname (%next-display-file (%display-extension format)))))
+    (save image path :format format)
     (let* ((label (prin1-to-string image))
            (backend (if *display-function*
                         (funcall *display-function* image path)

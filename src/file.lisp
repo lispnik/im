@@ -344,10 +344,34 @@ here rather than left for the caller to notice in a file."
                                                    (and (rationalp v)
                                                         (not (integerp v))))
                                                  values))))
-        ((every #'numberp values) :data-type-cdouble)
+        ((every #'numberp values)
+         ;; The same exactness the real branch above insists on, applied to
+         ;; both parts: #C(1/3 1/2) was being rounded into a cdouble without a
+         ;; word, while a bare 1/3 was refused a line earlier.
+         (let ((inexact (find-if-not #'%exact-as-double-p values)))
+           (when inexact
+             (cl:error 'data-error
+                       :detail (format nil "attribute ~A: a complex is stored ~
+                                            as a pair of doubles, and ~S does ~
+                                            not survive that -- pass floats, ~
+                                            or :data-type :data-type-cdouble ~
+                                            to round it"
+                                       name inexact))))
+         :data-type-cdouble)
         (t (cl:error 'data-error
                      :detail (format nil "attribute ~A: ~S is not a number"
                                      name (find-if-not #'numberp values))))))
+
+(defun %exact-as-double-p (value)
+  "True when both parts of VALUE are unchanged by a trip through a double.
+
+The general form of the ratio test: 1/3 fails it, 2^60 passes it because a
+double holds that integer exactly, and 2^60+1 fails it again. A NaN part makes
+the comparison itself signal, and a NaN is not exact in any useful sense, so
+the handler answers NIL."
+  (ignore-errors
+   (and (= (realpart value) (coerce (realpart value) 'double-float))
+        (= (imagpart value) (coerce (imagpart value) 'double-float)))))
 
 (defun %attribute-cell (name c-type value)
   "VALUE as something CFFI can store in one C-TYPE cell.
@@ -380,18 +404,24 @@ both outside the IM-ERROR hierarchy a caller wraps attribute writes in."
   ;; infinity on the ones where it does not -- arm64 Linux among them, which is
   ;; where CI caught this after the trap-based version passed everywhere else.
   ;; An infinity in an attribute is not a value any format can write back.
-  (let ((limit (ecase type
-                 (single-float most-positive-single-float)
-                 (double-float most-positive-double-float))))
-    (unless (<= (abs value) limit)
+  ;;
+  ;; The comparison is inside the handler and not before it, because comparing
+  ;; against a NaN is itself a trap. A NaN reaches here easily enough: reading
+  ;; a float attribute out of a file and setting it on another image is all it
+  ;; takes, and FLOATING-POINT-INVALID-OPERATION is not what a caller handling
+  ;; IM-ERROR is watching for.
+  ;; COERCE never returns NIL for a real, so NIL here means one of the two
+  ;; rejections and there is no need for a condition class to carry that.
+  (or (handler-case
+          (let ((limit (ecase type
+                         (single-float most-positive-single-float)
+                         (double-float most-positive-double-float))))
+            (and (<= (abs value) limit) (coerce value type)))
+        (arithmetic-error () nil))
       (cl:error 'data-error
-                :detail (format nil "attribute ~A: ~S is out of range for ~(~A~)"
+                :detail (format nil "attribute ~A: ~S is not a value ~(~A~) ~
+                                     can hold"
                                 name value type))))
-  (handler-case (coerce value type)
-    (arithmetic-error ()
-      (cl:error 'data-error
-                :detail (format nil "attribute ~A: ~S is out of range for ~(~A~)"
-                                name value type)))))
 
 (defun %encode-attribute (name pointer type values)
   "Write VALUES into POINTER as cells of TYPE."

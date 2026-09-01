@@ -109,6 +109,33 @@
     ;; Asked for explicitly, rounding is the caller's decision to make.
     (finishes (im:set-image-attribute image "x" 1/3 :data-type :data-type-double))))
 
+(test complex-attributes-are-held-to-the-same-exactness-as-real-ones
+  "#C(1/3 1/2) was rounded into a cdouble without a word, while a bare 1/3 was
+refused -- the same value, two answers, depending on whether it arrived alone."
+  (im:with-image (image (im:create 4 4 :color-space-rgb :data-type-byte))
+    (signals im:data-error (im:set-image-attribute image "x" #C(1/3 1/2)))
+    ;; Asked for explicitly, the rounding is the caller's decision.
+    (finishes (im:set-image-attribute image "x" #C(1/3 1/2)
+                                      :data-type :data-type-cdouble))
+    ;; A double holds this integer exactly, so there is nothing to object to.
+    (finishes (im:set-image-attribute image "y" (complex (expt 2 60) 1)))
+    (signals im:data-error
+      (im:set-image-attribute image "z" (complex (1+ (expt 2 60)) 1)))))
+
+#+sbcl
+(test a-nan-attribute-is-an-im-error-not-a-trap
+  "Comparing against a NaN traps, so the range check had to move inside the
+handler. A NaN arrives by reading a float attribute out of a file and setting
+it on another image -- no exotic code required."
+  (im:with-image (image (im:create 4 4 :color-space-rgb :data-type-byte))
+    (let ((nan (sb-int:with-float-traps-masked (:invalid :divide-by-zero)
+                 (/ 0d0 0d0))))
+      (let ((outcome (handler-case
+                         (progn (im:set-image-attribute image "n" nan) :accepted)
+                       (im:im-error () :im-error)
+                       (error (c) (type-of c)))))
+        (is (eq :im-error outcome) "a NaN gave ~S, wanted an IM:IM-ERROR" outcome)))))
+
 (test attribute-failures-are-all-im-errors
   "The hierarchy is the promise; CL:TYPE-ERROR and FLOATING-POINT-OVERFLOW
 escaping from COERCE broke it for two of these."

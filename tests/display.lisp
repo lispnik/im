@@ -91,7 +91,7 @@ DISPLAY-UNAVAILABLE exists to report."
   "FIND-SYMBOL signals on a package designator that names nothing; FIND-PACKAGE
 does not. Every probe has to lead with the latter."
   (is (null (im::%attached-p '#:no-such-package-here)))
-  (is (null (im::%external-symbol-function '#:no-such-package-here "ANYTHING")))
+  (is (null (im::%loaded-symbol-function '#:no-such-package-here "ANYTHING")))
   (finishes (im::%swank-image-type "PNG")))
 
 (test display-directory-without-a-trailing-slash-is-still-a-directory
@@ -140,3 +140,49 @@ already stepped past, permanently."
       (let ((files (directory (merge-pathnames "*.png" im:*display-directory*))))
         (is (<= (length files) 3)
             "~D files left after lowering the history to 2" (length files))))))
+
+(test the-sweep-leaves-alone-what-it-did-not-write
+  "Pointing *DISPLAY-DIRECTORY* at your own directory must not cost you files.
+
+*DISPLAY-COUNTER* restarts at zero each process, so the first call steps past
+whatever numbered files are already there -- and the sweep, when it matched on
+number alone, then reaped the ones it had stepped over. Twelve seeded files,
+one DISPLAY call, five gone."
+  (let* ((directory (uiop:ensure-directory-pathname (tmp-file "display-shared/")))
+         (im:*display-directory* directory)
+         (im:*display-function* (lambda (image pathname)
+                                  (declare (ignore image pathname))
+                                  :test-harness)))
+    (uiop:delete-directory-tree directory :validate t :if-does-not-exist :ignore)
+    (ensure-directories-exist directory)
+    (let ((seeded (loop for i from 1 to 12
+                        for path = (merge-pathnames (format nil "image-~D.png" i)
+                                                    directory)
+                        do (with-open-file (stream path :direction :output
+                                                        :if-exists :supersede)
+                             (write-string "not mine" stream))
+                        collect path)))
+      (im:with-image (image (gray-gradient 4 4))
+        (dotimes (i 3) (im:display image)))
+      (is (= 12 (count-if #'probe-file seeded))
+          "~D of 12 files DISPLAY did not write survived"
+          (count-if #'probe-file seeded)))))
+
+(test the-format-decides-the-temporary-file-name-and-the-emacs-type
+  "A temporary file named .png holding JPEG bytes renders as nothing in SLIME,
+which reads the image type from the extension."
+  (with-display-directory
+    (let (written)
+      (let ((im:*display-function* (lambda (image pathname)
+                                     (declare (ignore image))
+                                     (setf written pathname)
+                                     :test-harness)))
+        (im:with-image (image (gray-gradient 8 8))
+          (im:display image :format "JPEG")))
+      (is (string= "jpg" (pathname-type written)))
+      (is (string= "JPEG" (getf (im:file-info written) :format)))
+      ;; ...and that extension is what names the Emacs image type.
+      (is (string= "JPEG" (cdr (assoc "jpg" im::*emacs-image-types*
+                                      :test #'string=))))
+      (is (null (cdr (assoc "jp2" im::*emacs-image-types* :test #'string=)))
+          "a format Emacs has no type for must not be given one"))))
