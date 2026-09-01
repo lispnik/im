@@ -56,7 +56,10 @@
                ;; After file.lisp: DISPLAY writes the image out with SAVE.
                (:file "display")
                (:file "process")
-               (:file "capture"))
+               (:file "capture")
+               ;; Last: the REPL toolkit composes the operations above and
+               ;; DISPLAY, and adds nothing they depend on.
+               (:file "workbench"))
   :depends-on (#:cffi
                #:alexandria
                #:trivial-garbage)
@@ -112,6 +115,7 @@
                (:file "conditions")
                (:file "display")
                (:file "process")
+               (:file "workbench")
                (:file "cli"))
   ;; im/cli as well as im: the suite drives bin/im as a subprocess, and also
   ;; checks a couple of the CLI's own functions directly, which needs the

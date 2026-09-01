@@ -160,6 +160,36 @@ here. With nothing attached at all — a bare REPL, a script — `im:display`
 signals `im:display-unavailable` rather than writing a file no one will look
 at. Bind `im:*display-function*` to render somewhere else.
 
+`im:enable-repl-images` goes one step further under SLIME: a bare `im:image`
+result then renders itself instead of printing `#<IM:IMAGE …>`. (SLY's mrepl
+has no result hook, so there it signals and you call `im:display` yourself.)
+
+### A REPL workbench
+
+The processing operations take `(source destination …)` — you allocate the
+destination, they fill it. That is the right primitive and an awkward shape for
+the REPL, so `im:pipe` threads an image through a series of functional stages,
+reclaiming each intermediate as the next consumes it:
+
+```lisp
+(im:pipe (im:load #p"photo.jpg")
+         (im:resized :scale 0.5)          ; functional wrappers for the two
+         #'im:grayscale                   ; shape-changing operations
+         (im:derive #'im:convolve-sobel)  ; any (src dst) op, made functional
+         #'im:show)                        ; print stats + display, pass through
+```
+
+A stage is a function of one image returning a fresh one. `im:derive` turns any
+same-shape operation (`convolve-sobel`, `negative`, `morph-erode`, …) into that
+shape; `im:grayscale` and `im:resized` wrap the common shape-changers; anything
+else is a one-line lambda. The image passed in and the one returned are the
+caller's to own — only the intermediates are freed, and only after the next
+stage has used them (`im:destroy` is idempotent and finalizer-backed, so this
+is safe even for a stage that returns its own argument).
+
+`im:show` prints an image's geometry and per-plane statistics and displays it,
+returning the image so it drops into a pipe as a tap.
+
 ### Conditions
 
 Every failure is a subtype of `im:im-error`, and each of IM's error codes has
