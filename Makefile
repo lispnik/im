@@ -1,6 +1,6 @@
 # Build and test the IM Common Lisp bindings.
 #
-#   make          -- build bin/im (embeds the SBCL core)
+#   make          -- build bin/im and bin/im-mcp (embed the SBCL core)
 #   make test     -- run the FiveAM suite
 #   make bindings -- regenerate src/ffi/ from the IM headers
 #   make clean    -- remove bin/ and this tree's fasl cache
@@ -25,18 +25,27 @@ BOOT := --eval "(require :asdf)" \
 # CLI takes `im --version' from that. Leave it out and a version bump does not
 # rebuild, so the binary keeps reporting the previous one.
 SRC := im.asd version.txt \
-       $(wildcard src/*.lisp) $(wildcard src/ffi/*.lisp) $(wildcard src/cli/*.lisp)
+       $(wildcard src/*.lisp) $(wildcard src/ffi/*.lisp) \
+       $(wildcard src/cli/*.lisp) $(wildcard src/mcp/*.lisp)
 BIN := bin/im
+MCP := bin/im-mcp
 
 .PHONY: all test bindings clean help
 .DEFAULT_GOAL := all
 
-all: $(BIN)
+all: $(BIN) $(MCP)
 
 $(BIN): $(SRC)
 	@mkdir -p bin
 	$(SBCL) $(SBCL_FLAGS) $(BOOT) --eval '(asdf:make :im/cli)'
 	@ls -lh $(BIN)
+
+# The MCP server: same binding, a different front end. Built on demand rather
+# than shipped in the release, since it is run from an MCP client, not a shell.
+$(MCP): $(SRC)
+	@mkdir -p bin
+	$(SBCL) $(SBCL_FLAGS) $(BOOT) --eval '(asdf:make :im/mcp)'
+	@ls -lh $(MCP)
 
 test:
 	$(SBCL) $(SBCL_FLAGS) $(BOOT) --eval '(asdf:test-system :im)'

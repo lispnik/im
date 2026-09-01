@@ -59,6 +59,8 @@ im process IN OUT      a pipeline of operations
 im analyze FILE        label connected regions and measure them
 im stats FILE          per-plane statistics and histograms
 im compare A B         RMS error and signal-to-noise ratio
+im diff A B            SSIM, perceptual hash, and a difference heatmap
+im montage FILE...     lay many images out as one contact sheet
 im capture             list capture devices, or grab a frame
 im library             IM version and the libraries in use
 ```
@@ -82,6 +84,39 @@ to preserve the aspect ratio, and `50%`.
 
 Exit codes are 0 for success, 1 for an IM error, 2 for a usage error and 130
 for an interrupt. Diagnostics go to stderr, so piping stdout to `jq` is safe.
+
+`im compare` measures how far apart two images' pixels are; `im diff` answers
+the structural question — are they the *same picture* — with SSIM, a perceptual
+hash (which compares even across sizes and re-encodings), and, with `--output`,
+a heatmap of where they differ:
+
+```sh
+im diff before.png after.png --output changed.png
+im diff original.jpg thumbnail.jpg        # different sizes: hashes still answer
+```
+
+`im montage` composes many images into one contact sheet, normalising mixed
+sizes, colour spaces and depths onto a plain background:
+
+```sh
+im montage shots/*.png --output sheet.png --columns 4 --tile 200x200
+```
+
+## The MCP server
+
+`bin/im-mcp` (built by `make`) is a Model Context Protocol server, so an agent
+can inspect and transform images through the same binding. It speaks JSON-RPC
+over stdio and exposes `im_info`, `im_stats`, `im_formats`, `im_diff`,
+`im_thumbnail` and `im_montage` — and the last two return the image *inline*,
+so the agent gets the picture, not a path it cannot open. Point an MCP client
+at the executable:
+
+```json
+{ "command": "/path/to/bin/im-mcp" }
+```
+
+It reuses the image algebra behind `im diff` and `im montage` rather than
+reimplementing it, so the command line and the agent interface cannot drift.
 
 ## The library
 

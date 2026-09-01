@@ -223,3 +223,89 @@ would find the build tree and this would prove nothing."
                       (is (zerop code)
                           "a binary beside its libraries must run unaided")
                       (is (search "im version" out)))))))))))
+
+;;; im diff -------------------------------------------------------------------
+
+(test diff-reports-identical-similar-and-different
+  "The structural verdict tracks the actual relationship between the images."
+  (with-cli
+    ;; identical: the same file against itself
+    (multiple-value-bind (out err code)
+        (run-cli "diff" (namestring (image-file "lena.jpg"))
+                 (namestring (image-file "lena.jpg")))
+      (declare (ignore err))
+      (is (zerop code))
+      (is (search "identical" out))
+      (is (search "rms error         0" out) "identical images have zero RMSE")
+      (is (search "ssim              1" out) "identical images have SSIM 1"))
+    ;; different images, and different sizes: perceptual hashes still answer,
+    ;; the pixel metrics are skipped.
+    (multiple-value-bind (out err code)
+        (run-cli "diff" (namestring (image-file "lena.jpg"))
+                 (namestring (image-file "flower.jpg")))
+      (declare (ignore err))
+      (is (zerop code))
+      (is (search "dimensions match  -" out) "mismatched sizes are reported, not fatal")
+      (is (search "different" out)))))
+
+(test diff-writes-a-heatmap-for-same-size-images
+  (with-cli
+    (let ((blurred (namestring (tmp-file "diff-blur.png")))
+          (heat (namestring (tmp-file "diff-heat.png")))
+          (source (namestring (image-file "lena.jpg"))))
+      ;; make a same-size variant that differs
+      (run-cli "process" source blurred "--op" "gaussian=2")
+      (multiple-value-bind (out err code)
+          (run-cli "diff" source blurred "--output" heat)
+        (declare (ignore err))
+        (is (zerop code))
+        (is (probe-file heat) "the heatmap was written")
+        (is (search "similar" out))
+        (im:with-image (h (im:load (pathname heat)))
+          (is (eq :color-space-gray (im:color-space h))
+              "the heatmap is a single-channel difference"))))))
+
+;;; im montage ----------------------------------------------------------------
+
+(test montage-composes-a-grid-from-mixed-images
+  "A folder of mixed sizes and colour spaces becomes one RGB sheet."
+  (with-cli
+    (let ((sheet (namestring (tmp-file "montage-sheet.png"))))
+      (multiple-value-bind (out err code)
+          (run-cli "montage"
+                   (namestring (image-file "lena.jpg"))     ; rgb
+                   (namestring (image-file "rice.png"))     ; gray
+                   (namestring (image-file "flower.jpg"))   ; different size
+                   "--output" sheet "--columns" "2" "--tile" "100x100" "--gap" "10")
+        (declare (ignore err))
+        (is (zerop code))
+        (is (probe-file sheet))
+        (im:with-image (image (im:load (pathname sheet)))
+          (is (eq :color-space-rgb (im:color-space image)))
+          ;; 2 columns, 3 images -> 2 rows; each cell 100 + 10 gap, plus a
+          ;; leading gap: 10 + 2*(100+10) = 230 wide, 10 + 2*(100+10) = 230 tall.
+          (is (= 230 (im:width image)))
+          (is (= 230 (im:height image))))))))
+
+(test montage-does-not-flip-the-tiles
+  "PASTE addresses both images bottom-up; a sign slip there mirrors every tile.
+
+A marker whose first linear half is white and second half black must come back
+the same way round after a single-tile montage sized exactly to the image."
+  (with-cli
+    (let ((marker (tmp-file "montage-marker.png"))
+          (sheet (namestring (tmp-file "montage-flip.png"))))
+      (im:with-image (m (im:create 40 40 :color-space-gray :data-type-byte))
+        (let ((p (im:plane-pointer m 0)) (n (im:pixel-count m)))
+          (dotimes (i n) (setf (cffi:mem-aref p :unsigned-char i)
+                               (if (< i (floor n 2)) 255 0))))
+        (im:save m marker))
+      ;; one tile the marker's own size, no gap: the sheet is the marker back.
+      (run-cli "montage" (namestring marker) "--output" sheet
+               "--columns" "1" "--tile" "40x40" "--gap" "0")
+      (im:with-image (out (im:load (pathname sheet)))
+        (let ((p (im:plane-pointer out 0)) (n (im:pixel-count out)))
+          (is (> (cffi:mem-aref p :unsigned-char 0) 200)
+              "first pixel stayed bright -- tile not mirrored")
+          (is (< (cffi:mem-aref p :unsigned-char (1- n)) 55)
+              "last pixel stayed dark -- tile not mirrored"))))))

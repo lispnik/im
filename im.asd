@@ -1,7 +1,8 @@
 ;;;; im.asd
 ;;;;
-;;;; Five systems, down from the twelve .asd files this repository used to
-;;;; carry at its root (im, im-cffi, im-all, im-process, im-process-cffi,
+;;;; Four systems -- im, im/cli, im/mcp, im/tests -- down from the twelve .asd
+;;;; files this repository used to carry at its root (im, im-cffi, im-all,
+;;;; im-process, im-process-cffi,
 ;;;; im-jp2, im-jp2-cffi, im-avi, im-avi-cffi, im-wmv, im-wmv-cffi,
 ;;;; im-capture, im-capture-cffi, im-examples, im-tests).
 ;;;;
@@ -90,11 +91,32 @@
                              (:file "process")
                              (:file "analyze")
                              (:file "stats")
+                             (:file "diff")
+                             (:file "montage")
                              (:file "capture"))))
   :depends-on (#:im #:clingon #:shasht #:alexandria)
   :build-operation "program-op"
   :build-pathname "bin/im"
   :entry-point "im.cli:main")
+
+(defsystem #:im/mcp
+  :description "An MCP server exposing the IM toolkit to agents over stdio."
+  :author "Matthew Kennedy <burnsidemk@gmail.com>"
+  :licence "MIT"
+  :version (:read-file-line "version.txt")
+  :serial t
+  :components ((:module "mcp"
+                :pathname "src/mcp"
+                :serial t
+                :components ((:file "package")
+                             (:file "server")
+                             (:file "tools"))))
+  ;; Depends on im/cli, not to run commands but to reuse the image algebra
+  ;; behind `im diff' and `im montage' -- one implementation, two front ends.
+  :depends-on (#:im #:im/cli #:shasht)
+  :build-operation "program-op"
+  :build-pathname "bin/im-mcp"
+  :entry-point "im.mcp:main")
 
 ;; Halves the shipped binary. SBCL builds without core compression exist, so
 ;; this is conditional rather than a :COMPRESSION entry in the defsystem.
@@ -116,11 +138,12 @@
                (:file "display")
                (:file "process")
                (:file "workbench")
-               (:file "cli"))
+               (:file "cli")
+               (:file "mcp"))
   ;; im/cli as well as im: the suite drives bin/im as a subprocess, and also
   ;; checks a couple of the CLI's own functions directly, which needs the
   ;; package to exist at compile time.
-  :depends-on (#:im #:im/cli #:fiveam #:trivial-garbage #:shasht)
+  :depends-on (#:im #:im/cli #:im/mcp #:fiveam #:trivial-garbage #:shasht)
   ;; FiveAM's RUN! prints its report and returns NIL when anything failed.
   ;; Discarding that value makes TEST-OP succeed on a failing suite, which is
   ;; how this project's CI once went green with three tests failing.

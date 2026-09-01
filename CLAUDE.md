@@ -39,6 +39,7 @@ specific build; otherwise Homebrew's `tecgraf-im` is usually found.
 |---|---|
 | `im` | The binding: `src/ffi/` (raw) plus `src/*.lisp` (the Lisp API) |
 | `im/cli` | `im(1)`. `program-op` → `bin/im`, entry point `im.cli:main` |
+| `im/mcp` | MCP server. `program-op` → `bin/im-mcp`, entry point `im.mcp:main`. Reuses `im/cli`'s diff/montage image algebra rather than duplicating it |
 | `im/tests` | FiveAM suite |
 
 `im/cli`'s components live in a `:module` rather than under a system-level

@@ -101,6 +101,8 @@ Lisp API names them, so \"color-space-rgb\" and \"data-type-byte\".
   im analyze rice.png --regions
   im stats lena.jpg
   im compare a.png b.png
+  im diff a.png b.png --output heatmap.png
+  im montage *.jpg --output sheet.png --columns 4
   im capture --list
 
 Images are read and written through IM, so the format list depends on which
