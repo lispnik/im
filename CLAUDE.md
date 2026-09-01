@@ -138,6 +138,14 @@ order decide.
   amd64 and Windows, and returns an infinity on Linux arm64. Range-check
   against `most-positive-single-float` rather than catching the trap —
   CI is the only place the difference shows up.
+- **Comparing against a NaN is itself a trap.** A range check placed before
+  the `handler-case` that catches arithmetic errors is the error path, not a
+  guard against it. NaNs reach attribute code by the ordinary route: read a
+  float attribute from a file, set it on another image.
+- **A cleanup sweep must key on what it wrote, not on what the name looks
+  like.** `im:display` numbers files from a counter that restarts each
+  process, so matching `image-<n>.png` in a user-nominated directory deleted
+  files it had never written. Files carry a per-process token now.
 - **`find-symbol` signals when its package designator names nothing**, unlike
   `find-package`. Probing for an optional package (`swank`, `slynk`) must
   lead with `find-package`, or the probe is the crash.
