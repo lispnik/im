@@ -288,10 +288,17 @@ the pipeline destroys whatever it replaces."
                   (let ((viewable (im:create-based gray :data-type :data-type-byte)))
                     ;; Magnitudes span many orders of magnitude, so a linear
                     ;; cast leaves everything but the DC term black. IM's
-                    ;; logarithmic gamma is what makes a spectrum legible.
+                    ;; logarithmic gamma is what makes a spectrum legible -- but
+                    ;; it applies the log AFTER rescaling the magnitudes onto
+                    ;; 0..1 by their own min/max, and that max is the DC term.
+                    ;; A typical AC magnitude lands around 1e-4 of it, so the
+                    ;; gamma has to be as large as that dynamic range to lift it
+                    ;; off zero: -10 left all but the DC neighbourhood black
+                    ;; (~12% of pixels lit), -1000 lights ~97% and shows the
+                    ;; structure.
                     (im:convert-data-type spectrum viewable
                                           :complex-part :magnitude
-                                          :gamma -10.0d0
+                                          :gamma -1000.0d0
                                           :cast-mode :min-max)
                     viewable))
              (im:destroy spectrum)))

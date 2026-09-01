@@ -102,6 +102,31 @@ before strings turns \"JPEG\" into [\"J\",\"P\",\"E\",\"G\"]."
           (is (= 111 (im:height result)))
           (is (eq :color-space-gray (im:color-space result))))))))
 
+(test spectrum-is-legible-not-black
+  "The --op spectrum output must show structure, not be almost entirely black.
+
+IM applies its logarithmic gamma after rescaling the magnitudes by their own
+max, which is the DC term -- so the gamma has to be as large as the FFT's
+dynamic range. A too-small value (the original -10) left all but the DC
+neighbourhood at zero, which reads as a black PNG."
+  (with-cli
+    (let ((output (namestring (tmp-file "cli-spectrum.png"))))
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "lena.jpg")) output
+                   "--op" "spectrum")
+        (declare (ignore out err))
+        (is (zerop code))
+        (im:with-image (result (im:load output))
+          (let* ((plane (im:plane-pointer result 0))
+                 (count (im:pixel-count result))
+                 (nonzero (loop for i below count
+                                count (plusp (cffi:mem-aref plane :unsigned-char i)))))
+            ;; -10 lit ~12% of pixels; -1000 lights ~97%. Half is a wide margin
+            ;; that still fails hard if the gamma regresses to near-black.
+            (is (> nonzero (floor count 2))
+                "spectrum is mostly black: only ~D of ~D pixels are lit"
+                nonzero count)))))))
+
 (test unknown-operation-is-reported-not-ignored
   (with-cli
     (multiple-value-bind (out err code)
