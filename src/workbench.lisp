@@ -190,9 +190,19 @@ everything else to the previous function unchanged."
 #<IM:IMAGE ...>. Returns T when installed.
 
 Needs the slime-media contrib on the Emacs side, the same prerequisite DISPLAY
-documents. Under SLY -- whose mrepl offers no result hook -- or a bare Lisp,
-this signals an error naming the limitation; use SHOW or DISPLAY there. Undo
-with DISABLE-REPL-IMAGES."
+documents. Its absence cannot be detected from here -- the image is a one-way
+message -- so it surfaces in Emacs instead, as
+
+  slime-dispatch-event: slime-dcase failed: (:write-image ...)
+
+which is SLIME's core dispatcher rejecting the event because slime-media, which
+handles it, was never loaded. Fix it with (slime-setup '(slime-repl
+slime-media)) and reconnect, or in a running session evaluate (require
+'slime-media) and (add-hook 'slime-event-hooks 'slime-dispatch-media-event).
+
+Under SLY -- whose mrepl offers no result hook -- or a bare Lisp, this signals
+an error naming the limitation; use SHOW or DISPLAY there. Undo with
+DISABLE-REPL-IMAGES."
   (let ((variable (%repl-results-variable)))
     (unless variable
       (cl:error 'im-error

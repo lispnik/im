@@ -199,6 +199,27 @@ at. Bind `im:*display-function*` to render somewhere else.
 result then renders itself instead of printing `#<IM:IMAGE …>`. (SLY's mrepl
 has no result hook, so there it signals and you call `im:display` yourself.)
 
+Both paths under SLIME need the slime-media contrib, and this is where its
+absence shows: an image result errors in Emacs with
+
+```
+slime-dispatch-event: slime-dcase failed: (:write-image ((:type png :file "…")) "#<IM:IMAGE …>")
+```
+
+That is SLIME's core dispatcher rejecting the `:write-image` event because
+slime-media — which handles it — was never loaded. Add it and reconnect:
+
+```elisp
+(slime-setup '(slime-repl slime-media))
+```
+
+or, to fix a running session without restarting, evaluate in Emacs:
+
+```elisp
+(require 'slime-media)
+(add-hook 'slime-event-hooks 'slime-dispatch-media-event)
+```
+
 ### A REPL workbench
 
 The processing operations take `(source destination …)` — you allocate the
