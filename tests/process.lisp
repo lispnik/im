@@ -153,3 +153,66 @@ conversion step."
     (signals im:data-error (im:fft source wrong-size))
     ;; The inverse additionally requires a complex SOURCE.
     (signals im:data-error (im:ifft source complex-dst))))
+
+;;; Decorrelation stretch -----------------------------------------------------
+
+(test decorrelation-stretch-changes-a-correlated-image
+  (im:with-images ((source (correlated-rgb))
+                   (dest (im:create 48 32 :color-space-rgb :data-type-byte)))
+    (finishes (im:decorrelation-stretch source dest
+                                        :space :decorrelation-space-rgb
+                                        :scale 3.0d0))
+    ;; An operation that copied its input, or wrote a constant, would satisfy
+    ;; a weaker assertion than this one.
+    (is (> (im:rms-error source dest) 1.0d0))))
+
+(test decorrelation-fit-then-apply-matches-the-one-shot-call
+  (im:with-images ((source (correlated-rgb))
+                   (one (im:create 48 32 :color-space-rgb :data-type-byte))
+                   (two (im:create 48 32 :color-space-rgb :data-type-byte)))
+    (im:decorrelation-stretch source one :space :decorrelation-space-yuv :scale 2.0d0)
+    (let ((transform (im:decorrelation-fit source
+                                           :space :decorrelation-space-yuv
+                                           :scale 2.0d0)))
+      (is (= 3 (im:decorrelation-rank transform)))
+      (is (eq :decorrelation-space-yuv (im:decorrelation-space transform)))
+      (im:decorrelation-apply source two transform)
+      ;; The struct made a round trip out to Lisp and back into C, so this
+      ;; failing would mean a field was marshalled to the wrong offset.
+      (is (zerop (im:rms-error one two))))))
+
+(test decorrelation-fit-reports-a-flat-image-as-rank-zero
+  (im:with-images ((source (im:create 16 16 :color-space-rgb :data-type-byte)))
+    (dotimes (plane 3) (set-pixels source plane (+ 40 (* 30 plane))))
+    (let ((transform (im:decorrelation-fit source :space :decorrelation-space-rgb)))
+      (is (zerop (im:decorrelation-rank transform))
+          "one colour is no colour cloud, so there is nothing to stretch"))))
+
+(test decorrelation-mask-restricts-the-fit
+  (im:with-images ((source (correlated-rgb))
+                   (mask (im:create 48 32 :color-space-binary :data-type-byte)))
+    (set-pixels mask 0 0)
+    (dotimes (i (floor (im:pixel-count mask) 2))
+      (setf (cffi:mem-aref (im:plane-pointer mask 0) :unsigned-char i) 1))
+    (let ((whole (im:decorrelation-fit source :space :decorrelation-space-rgb))
+          (part (im:decorrelation-fit source :space :decorrelation-space-rgb :mask mask)))
+      (is (not (equalp (im:decorrelation-mean whole) (im:decorrelation-mean part)))
+          "the masked fit must be measured from the masked pixels only"))))
+
+(test decorrelation-refuses-an-unnormalized-real-image-in-lab
+  ;; L*a*b* is defined over 0-1 and IM's conversion saturates outside it, so
+  ;; without this check the caller gets a flat image and no error at all.
+  (im:with-images ((source (im:create 16 16 :color-space-rgb :data-type-float)))
+    (dotimes (plane 3)
+      (dotimes (i (im:pixel-count source))
+        (setf (cffi:mem-aref (im:plane-pointer source plane) :float i)
+              (+ 100.0 (* 10.0 plane)))))
+    (signals im:im-error
+      (im:decorrelation-fit source :space :decorrelation-space-lds))
+    ;; and the spaces that do not convert through L*a*b* are left alone
+    (finishes (im:decorrelation-fit source :space :decorrelation-space-rgb))))
+
+(test decorrelation-rejects-an-unknown-space
+  (im:with-images ((source (correlated-rgb)))
+    (signals im:im-error
+      (im:decorrelation-fit source :space :decorrelation-space-nonesuch))))

@@ -77,6 +77,18 @@ Operations in `im process` are given as repeated `--op` arguments and applied
 ```sh
 im process in.jpg out.png \
     --op resize=50% --op colorspace=gray --op gaussian=1.5 --op sobel
+
+`--op dstretch=SPACE[,SCALE]` is the decorrelation stretch — the enhancement
+DStretch is built on, which pulls apart colours that lie along a single axis so
+faint differences become visible. `lds` is the general-purpose space and the
+default scale is 6:
+
+    im process faded.jpg enhanced.png --op dstretch=lds
+
+`lre`, `yre` and `crgb` favour reds, `yye` and `lye` yellows, `ybk` and `lbk`
+blacks and blues. `im:decorrelation-fit` and `im:decorrelation-apply` expose the
+same thing as a transform that can be fitted to one image and applied to a
+whole series, which is how you get consistent colour across a set.
 ```
 
 `im process --list-ops` lists all twenty. Sizes accept `WxH`, `800x` or `x600`

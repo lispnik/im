@@ -43,7 +43,19 @@
           find-regions
           make-label-image
           region-areas
-          region-centroids))
+          region-centroids
+          decorrelation-stretch
+          decorrelation-fit
+          decorrelation-apply
+          decorrelation-transform
+          decorrelation-transform-p
+          decorrelation-matrix
+          decorrelation-offset
+          decorrelation-mean
+          decorrelation-target
+          decorrelation-stddev
+          decorrelation-rank
+          decorrelation-space))
 
 (defmacro define-process-op (name lambda-list c-function &body body)
   "Define an im_process wrapper that participates in cancellation.
@@ -358,6 +370,157 @@ byte data and 65536 for the 16-bit types."
       (let ((result (make-array levels)))
         (dotimes (i levels result)
           (setf (aref result i) (cffi:mem-aref counts :unsigned-long i)))))))
+
+;;; Decorrelation stretch -----------------------------------------------------
+
+;;; The enhancement DStretch is built on: colours strung along a single axis --
+;;; faded pigment against rock, which is what the technique was made for -- are
+;;; pulled apart until the differences are visible.
+;;;
+;;; SPACE is a :DECORRELATION-SPACE-* keyword, in the same fully-prefixed form
+;;; the colour-space and data-type enums use here. Which one to reach for is a
+;;; matter of what colour is being looked for; :DECORRELATION-SPACE-LDS is the
+;;; general-purpose one.
+;;;
+;;; SCALE multiplies each band's own spread, so 1 decorrelates without adding
+;;; contrast and leaves a washed-out image just as washed out. That is correct
+;;; and rarely what is wanted: a faint photograph takes 6 or 8 before it clips,
+;;; where a full-contrast one clips at 2.
+
+(defstruct (decorrelation-transform (:conc-name decorrelation-))
+  "A fitted decorrelation stretch, as returned by DECORRELATION-FIT.
+
+MATRIX and OFFSET are the whole of the transform -- out = MATRIX*in + OFFSET,
+over the source's own components. The rest reports what the fit found: RANK
+below 3 means the colours lay in a plane or on a line, so the stretch could
+not decorrelate every direction and did not pretend to."
+  (matrix (make-array 9 :element-type 'double-float :initial-element 0d0)
+   :type (simple-array double-float (9)))
+  (offset (make-array 3 :element-type 'double-float :initial-element 0d0)
+   :type (simple-array double-float (3)))
+  (mean (make-array 3 :element-type 'double-float :initial-element 0d0)
+   :type (simple-array double-float (3)))
+  (target (make-array 3 :element-type 'double-float :initial-element 0d0)
+   :type (simple-array double-float (3)))
+  (stddev (make-array 3 :element-type 'double-float :initial-element 0d0)
+   :type (simple-array double-float (3)))
+  (rank 3 :type (integer 0 3))
+  (space :decorrelation-space-rgb))
+
+(defun %decorrelation-space-value (space)
+  (handler-case (cffi:foreign-enum-value 'im.ffi::decorrelation-space space)
+    (cl:error ()
+      (cl:error 'im-error
+                :detail (format nil "unknown decorrelation space ~S" space)))))
+
+(defun %read-decorrelation-transform (pointer)
+  (flet ((doubles (slot count)
+           (let ((array (make-array count :element-type 'double-float))
+                 (base (cffi:foreign-slot-pointer
+                        pointer '(:struct im.ffi::im-decorrelation-transform-struct) slot)))
+             (dotimes (i count array)
+               (setf (aref array i) (cffi:mem-aref base :double i))))))
+    (make-decorrelation-transform
+     :matrix (doubles 'im.ffi::matrix 9)
+     :offset (doubles 'im.ffi::offset 3)
+     :mean (doubles 'im.ffi::mean 3)
+     :target (doubles 'im.ffi::target 3)
+     :stddev (doubles 'im.ffi::stddev 3)
+     :rank (cffi:foreign-slot-value
+            pointer '(:struct im.ffi::im-decorrelation-transform-struct) 'im.ffi::rank)
+     :space (cffi:foreign-enum-keyword
+             'im.ffi::decorrelation-space
+             (cffi:foreign-slot-value
+              pointer '(:struct im.ffi::im-decorrelation-transform-struct)
+              'im.ffi::color-space)))))
+
+(defun %write-decorrelation-transform (transform pointer)
+  (flet ((doubles (slot values)
+           (let ((base (cffi:foreign-slot-pointer
+                        pointer '(:struct im.ffi::im-decorrelation-transform-struct) slot)))
+             (dotimes (i (length values))
+               (setf (cffi:mem-aref base :double i) (aref values i))))))
+    (doubles 'im.ffi::matrix (decorrelation-matrix transform))
+    (doubles 'im.ffi::offset (decorrelation-offset transform))
+    (doubles 'im.ffi::mean (decorrelation-mean transform))
+    (doubles 'im.ffi::target (decorrelation-target transform))
+    (doubles 'im.ffi::stddev (decorrelation-stddev transform))
+    (setf (cffi:foreign-slot-value
+           pointer '(:struct im.ffi::im-decorrelation-transform-struct) 'im.ffi::rank)
+          (decorrelation-rank transform))
+    (setf (cffi:foreign-slot-value
+           pointer '(:struct im.ffi::im-decorrelation-transform-struct) 'im.ffi::color-space)
+          (%decorrelation-space-value (decorrelation-space transform)))))
+
+(defparameter *decorrelation-lab-spaces*
+  '(:decorrelation-space-lab :decorrelation-space-lds
+    :decorrelation-space-lre :decorrelation-space-lbk
+    :decorrelation-space-lye)
+  "The spaces that route through CIE L*a*b*.")
+
+(defun %check-decorrelation-normalized (image space)
+  "Refuse an unnormalized real image in an L*a*b* space.
+
+L*a*b* is defined over 0-1, and IM's conversion saturates outside it, so a
+float image carrying 0-255 comes back a flat single colour rather than an
+error -- the failure looks like a broken operation instead of a misuse. There
+is no way for the C layer to tell an unnormalized image from a legitimately
+bright one, so the check belongs here, and only in the case that would
+otherwise fail silently."
+  (when (and (member space *decorrelation-lab-spaces*)
+             (member (data-type image) '(:data-type-float :data-type-double)))
+    (loop for plane below 3
+          for stats = (statistics image plane)
+          when (or (> (getf stats :max) 1.0d0) (< (getf stats :min) 0.0d0))
+            do (cl:error 'im-error
+                         :detail (format nil
+                                         "~A needs a real image normalized to 0-1; plane ~D spans ~,4F to ~,4F"
+                                         space plane
+                                         (getf stats :min) (getf stats :max))))))
+
+(defun decorrelation-fit (image &key (space :decorrelation-space-lds) (scale 1.0d0) mask)
+  "Fit a decorrelation stretch to IMAGE without applying it.
+
+MASK, when given, is an IM_BINARY or IM_GRAY byte image of the same size, and
+only the pixels where it is non-zero are measured. That is the workflow the
+compute/apply split exists for: fit to one patch of pigment, apply to the
+whole frame, and get the same colours out of every image in a series.
+
+Returns a DECORRELATION-TRANSFORM."
+  (%check-decorrelation-normalized image space)
+  (cffi:with-foreign-object
+      (transform '(:struct im.ffi::im-decorrelation-transform-struct))
+    (check-operation "decorrelation-fit"
+      (not (zerop (im.ffi::%im-process-decorrelation-calc-transform
+                   (handle image)
+                   (%decorrelation-space-value space)
+                   (coerce scale 'double-float)
+                   (cffi:null-pointer)
+                   (if mask (handle mask) (cffi:null-pointer))
+                   transform))))
+    (%read-decorrelation-transform transform)))
+
+(defun decorrelation-apply (src dst transform)
+  "Apply a fitted TRANSFORM to SRC, writing DST. SRC and DST may be the same."
+  (cffi:with-foreign-object
+      (foreign '(:struct im.ffi::im-decorrelation-transform-struct))
+    (%write-decorrelation-transform transform foreign)
+    (check-operation "decorrelation-apply"
+      (not (zerop (im.ffi::%im-process-decorrelation-apply-transform
+                   (handle src) (handle dst) foreign))))))
+
+(defun decorrelation-stretch (src dst &key (space :decorrelation-space-lds) (scale 1.0d0))
+  "Decorrelation stretch SRC into DST. SRC and DST may be the same image.
+
+Equivalent to DECORRELATION-FIT over the whole image followed by
+DECORRELATION-APPLY, and the thing to reach for when the transform itself is
+of no interest."
+  (%check-decorrelation-normalized src space)
+  (check-operation "decorrelation-stretch"
+    (not (zerop (im.ffi::%im-process-decorrelation-stretch
+                 (handle src) (handle dst)
+                 (%decorrelation-space-value space)
+                 (coerce scale 'double-float))))))
 
 ;;; Statistics and analysis ---------------------------------------------------
 

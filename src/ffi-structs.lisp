@@ -76,3 +76,30 @@
   ;; too small to add a whole byte now grows by one byte rather than stalling;
   ;; negative disables reallocation entirely.
   (reallocate :float))
+
+;;; imDecorrelationTransform — im_process_pnt.h:490
+;;;
+;;; The decorrelation stretch, computed once by
+;;; imProcessDecorrelationCalcTransform and applied any number of times by
+;;; imProcessDecorrelationApplyTransform. Passed by pointer both ways, and
+;;; plain old data throughout, so a WITH-FOREIGN-OBJECT is the whole of the
+;;; lifetime management.
+;;;
+;;; Unlike imStats above there is no C type model to get wrong here: every
+;;; field is a double or an int, both fixed width on every platform IM
+;;; builds on, so the obvious spelling is also the portable one.
+;;;
+;;; MATRIX and OFFSET are the transform, and the only fields APPLY reads:
+;;; out = MATRIX * in + OFFSET, in the source's own components. The rest is
+;;; what the calculation found and is there to be looked at -- RANK below 3
+;;; means the colours were confined to a plane or a line, which is the case
+;;; where the stretch cannot do its whole job and says so.
+
+(cffi:defcstruct im-decorrelation-transform-struct
+  (matrix :double :count 9)   ; row-major 3x3
+  (offset :double :count 3)
+  (mean :double :count 3)
+  (target :double :count 3)
+  (stddev :double :count 3)
+  (rank :int)
+  (color-space :int))

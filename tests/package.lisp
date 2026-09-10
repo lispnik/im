@@ -48,6 +48,30 @@
                    do (setf (cffi:mem-aref plane :unsigned-char (+ (* row width) col)) 1)))
     image))
 
+(defun correlated-rgb (&key (width 48) (height 32))
+  "An RGB byte image whose three planes lie close to one axis.
+
+The shape a decorrelation stretch exists for -- pigment against rock -- and
+the one where an operation that quietly did nothing could not be told from one
+that worked. Deterministic, so a fit is reproducible between two calls."
+  (let ((image (im:create width height :color-space-rgb :data-type-byte))
+        (state 12345))
+    (flet ((next ()
+             (setf state (ldb (byte 32 0) (+ (* state 1103515245) 12345)))
+             (/ (ldb (byte 15 16) state) 32768.0d0)))
+      (dotimes (i (* width height) image)
+        ;; One shared component carrying most of the variance, plus a small
+        ;; independent one per plane. Without that per-plane jitter the three
+        ;; planes differ only by a constant, the covariance is exactly rank 1,
+        ;; and every fit reports rank 1 -- which is a degenerate image rather
+        ;; than a correlated one.
+        (let ((base (+ 128.0d0 (* 40.0d0 (- (next) 0.5d0)))))
+          (dotimes (plane 3)
+            (setf (cffi:mem-aref (im:plane-pointer image plane) :unsigned-char i)
+                  (max 0 (min 255 (round (+ base
+                                            (* 6.0d0 (- (next) 0.5d0))
+                                            (* -6.0d0 plane))))))))))))
+
 (defun pixel (image plane x y)
   (cffi:mem-aref (im:plane-pointer image plane) :unsigned-char
                  (+ (* y (im:width image)) x)))

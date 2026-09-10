@@ -77,6 +77,10 @@ Parsing traps already found and fixed, all of which failed *silently*:
 - `(string-trim " \t" ...)` in Common Lisp trims space **and the letter t** —
   there is no `\t` escape in CL string literals. Every C type lost a trailing
   `t`, so `format` was bound as `forma`.
+- Doxygen's inline markup commands (`\p`, `\c`, `\a`, `\e`, `\b`) mark up the
+  next word and have to be dropped along with `\ref`. Leaving them in put a
+  literal `\p` in front of every parameter name the prose mentioned — harmless
+  but wrong, and invisible until a header started using them heavily.
 
 ### Resource ownership
 

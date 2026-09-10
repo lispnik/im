@@ -279,13 +279,18 @@ the same spelling is usually an output buffer."
   "Turn a doxygen block into a docstring.
 
 Drops the Lua signature lines (\\verbatim ... \\endverbatim), the \\ingroup
-tag and the leading asterisks, and flattens \\ref and \\n. What is left is
-IM's own prose, which is the part worth keeping."
+tag and the leading asterisks, and flattens \\ref, \\n and the inline markup
+commands. What is left is IM's own prose, which is the part worth keeping."
   (when text
     (let* ((s (cl-ppcre:regex-replace-all "(?s)\\\\verbatim.*?\\\\endverbatim" text ""))
            (s (cl-ppcre:regex-replace-all "\\\\ingroup\\s+\\S+" s ""))
            (s (cl-ppcre:regex-replace-all "\\\\(brief|par)\\s*" s ""))
            (s (cl-ppcre:regex-replace-all "\\\\ref\\s+" s ""))
+           ;; \p, \c, \a, \e mark up the next word only; \b likewise, and it
+           ;; must not be spelled \\b\\s+ in a way that also eats \\brief, which is
+           ;; why that one is handled above. Leaving these in put literal "\p"
+           ;; in front of every parameter name the newer headers mention.
+           (s (cl-ppcre:regex-replace-all "\\\\[pcaeb]\\s+" s ""))
            (s (cl-ppcre:regex-replace-all "\\\\n\\b" s ""))
            (s (cl-ppcre:regex-replace-all "(?m)^\\s*\\*+\\s?" s ""))
            (s (cl-ppcre:regex-replace-all "\\s+" s " ")))

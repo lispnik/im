@@ -127,6 +127,45 @@ neighbourhood at zero, which reads as a black PNG."
                 "spectrum is mostly black: only ~D of ~D pixels are lit"
                 nonzero count)))))))
 
+(test dstretch-op-enhances-and-validates-its-argument
+  "--op dstretch runs, and rejects a space it cannot honour.
+
+The default scale here is 6 rather than the library's 1 on purpose: 1
+decorrelates without adding contrast, which on a low-contrast photograph -- the
+only kind anyone points this at -- looks exactly like nothing happened."
+  (with-cli
+    (let ((output (namestring (tmp-file "cli-dstretch.png"))))
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "lena.jpg")) output
+                   "--op" "dstretch=lds,6")
+        (declare (ignore out err))
+        (is (zerop code))
+        (is (probe-file output))
+        (im:with-images ((source (im:load (namestring (image-file "lena.jpg"))))
+                         (result (im:load output)))
+          (is (> (im:rms-error source result) 1.0d0)
+              "the stretch must actually have changed the image")))
+
+      ;; the scale is optional
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "lena.jpg")) output "--op" "dstretch=yre")
+        (declare (ignore out err))
+        (is (zerop code)))
+
+      ;; an unknown space names the alternatives rather than failing obscurely
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "lena.jpg")) output "--op" "dstretch=nope")
+        (declare (ignore out))
+        (is (not (zerop code)))
+        (is (search "unknown decorrelation space" err)))
+
+      ;; and the custom space, which needs a matrix --op has nowhere to put
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "lena.jpg")) output "--op" "dstretch=custom")
+        (declare (ignore out))
+        (is (not (zerop code)))
+        (is (search "needs a matrix" err))))))
+
 (test unknown-operation-is-reported-not-ignored
   (with-cli
     (multiple-value-bind (out err code)

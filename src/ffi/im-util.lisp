@@ -114,15 +114,15 @@ returns 0."
   "Returns the current CPU byte order.")
 
 (cffi:defcfun ("imBinSwapBytes" %im-bin-swap-bytes) :void
-  "Changes the byte order of an array of \\a count values, each \\a size
-bytes. \\a size is the width of one scalar value: 1 (a no-op), 2, 4 or 8.
-It also accepts 16, the width of IM_CDOUBLE, which is swapped as two
-independent 8-byte halves. Complex values must be passed as their real
-components -- the size of one component and twice the count -- because
-element size alone cannot tell an IM_CFLOAT (two 4-byte floats) from a
-double. Passing imDataTypeSize(IM_CFLOAT) directly byte-swaps correctly
-but transposes the real and imaginary parts. A NULL \\a data, a \\a count
-of zero or less, and any other \\a size leave the data untouched."
+  "Changes the byte order of an array of count values, each size bytes. size
+is the width of one scalar value: 1 (a no-op), 2, 4 or 8. It also accepts
+16, the width of IM_CDOUBLE, which is swapped as two independent 8-byte
+halves. Complex values must be passed as their real components -- the size
+of one component and twice the count -- because element size alone cannot
+tell an IM_CFLOAT (two 4-byte floats) from a double. Passing
+imDataTypeSize(IM_CFLOAT) directly byte-swaps correctly but transposes the
+real and imaginary parts. A NULL data, a count of zero or less, and any
+other size leave the data untouched."
   (data :pointer)
   (count :int)
   (size :int))

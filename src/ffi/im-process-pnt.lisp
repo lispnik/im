@@ -31,6 +31,24 @@
   :logic-op-xor
   :logic-op-nor)
 
+;;; imDecorrelationSpace
+(cffi:defcenum decorrelation-space
+  :decorrelation-space-rgb
+  :decorrelation-space-crgb
+  :decorrelation-space-yuv
+  :decorrelation-space-lab
+  :decorrelation-space-yds
+  :decorrelation-space-ybr
+  :decorrelation-space-ybk
+  :decorrelation-space-yre
+  :decorrelation-space-yrd
+  :decorrelation-space-yye
+  :decorrelation-space-lds
+  :decorrelation-space-lre
+  :decorrelation-space-lbk
+  :decorrelation-space-lye
+  :decorrelation-space-custom)
+
 ;;; imBinaryOp
 (cffi:defcenum binary-op
   :binary-op-add
@@ -361,6 +379,63 @@ It will not change the alpha channel if any. Target must be IM_FLOAT or
 IM_DOUBLE."
   (src-image im-image)
   (dst-image im-image))
+
+(cffi:defcfun ("imProcessDecorrelationCalcTransform" %im-process-decorrelation-calc-transform) :int
+  "Computes the decorrelation stretch of an image without applying it. Source
+image must be IM_RGB, of any data type except complex. color_space is an
+imDecorrelationSpace. scale multiplies each band's own standard deviation,
+so 1 decorrelates the colours without changing how far they spread and 2
+doubles that spread. Note that 1 therefore leaves a washed-out image just
+as washed out -- correctly, but not usefully, and that is the image this
+operation is usually pointed at. How far scale can be pushed before the
+result clips depends entirely on how much spread the source had: a faint,
+low-contrast photograph takes 6 or 8 happily where a full-contrast one
+clips at 2. custom_matrix is a row-major forward 3x3, used only when
+color_space is IM_DECORR_CUSTOM and ignored (may be NULL) otherwise.
+mask_image, when not NULL, must be IM_GRAY/IM_BINARY of IM_BYTE and the
+same size as the source; only the pixels where it is non-zero enter the
+statistics. This is how a transform is derived from one patch of an image
+and applied to the whole of it. Returns zero if the counter aborted."
+  (src-image im-image)
+  (color-space :int)
+  (scale :double)
+  (custom-matrix :pointer)
+  (mask-image im-image)
+  (transform :pointer))
+
+(cffi:defcfun ("imProcessDecorrelationApplyTransform" %im-process-decorrelation-apply-transform) :int
+  "Applies a transform from imProcessDecorrelationCalcTransform. Images must
+be IM_RGB, of the same size and data type, any type except complex. Can be
+done in-place. Alpha is not changed if present. Integer results are
+clipped to the data type's range. Returns zero if the counter aborted."
+  (src-image im-image)
+  (dst-image im-image)
+  (transform :pointer))
+
+(cffi:defcfun ("imProcessDecorrelationStretch" %im-process-decorrelation-stretch) :int
+  "Performs a decorrelation stretch, the enhancement DStretch is built on.
+Colours that lie along a single axis in the source -- faded pigment
+against rock, which is what the technique was made for -- are spread over
+the whole gamut, so differences too small to see become plain. Equivalent
+to imProcessDecorrelationCalcTransform over the whole image followed by
+imProcessDecorrelationApplyTransform. Images must be IM_RGB, of the same
+size and data type, any type except complex. Can be done in-place. Alpha
+is not changed if present. A band with no variance is left alone rather
+than amplified, so a flat image is returned unchanged. color_space cannot
+be IM_DECORR_CUSTOM here, there being nowhere to pass the matrix; use
+imProcessDecorrelationCalcTransform and
+imProcessDecorrelationApplyTransform for that. IM_FLOAT and IM_DOUBLE
+sources must be normalized to 0-1 when color_space is one of the L*a*b*
+ones. See imDecorrelationSpace. To stretch hard without losing what falls
+outside the range, work in IM_FLOAT and put the result back in gamut
+afterwards rather than clipping it: real destinations are not clipped, so
+imProcessToneGamut with IM_GAMUT_NORMALIZE followed by
+imProcessUnNormalize keeps the whole of a large scale. Returns zero if the
+counter aborted."
+  (src-image im-image)
+  (dst-image im-image)
+  (color-space :int)
+  (scale :double))
 
 (cffi:defcfun ("imProcessReplaceColor" %im-process-replace-color) :void
   "Replaces the source color by the target color. The color will be type

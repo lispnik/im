@@ -97,6 +97,15 @@ the pipeline destroys whatever it replaces."
                    name))
     key))
 
+(defun keyword-for-decorrelation-space (name)
+  (let ((key (intern (string-upcase (format nil "DECORRELATION-SPACE-~A" name)) :keyword)))
+    (unless (ignore-errors (cffi:foreign-enum-value 'im.ffi::decorrelation-space key))
+      (usage-error "unknown decorrelation space ~S; try lds, lab, lre, lbk, lye, rgb, crgb, yuv, yds, ybr, ybk, yre, yrd or yye"
+                   name))
+    (when (eq key :decorrelation-space-custom)
+      (usage-error "the custom decorrelation space needs a matrix, which --op cannot carry"))
+    key))
+
 (defun keyword-for-data-type (name)
   (let ((key (intern (string-upcase (format nil "DATA-TYPE-~A" name)) :keyword)))
     (unless (ignore-errors (cffi:foreign-enum-value 'im.ffi::data-type key))
@@ -168,6 +177,24 @@ the pipeline destroys whatever it replaces."
                  (require-argument argument "colorspace" "gray")))
          (destination (im:create-based image :color-space space)))
     (im:convert-color-space image destination)
+    destination))
+
+(define-operation "dstretch" (image argument) "SPACE[,SCALE]"
+  "Decorrelation stretch: pull apart colours that lie along one axis"
+  ;; The enhancement DStretch is built on, and the reason someone reaches for
+  ;; it is almost always a photograph with too little colour separation to
+  ;; read. SCALE below about 4 will look like nothing happened on such an
+  ;; image -- 1 decorrelates without adding any contrast at all -- so the
+  ;; default here is 6 rather than the library's 1.
+  (let* ((fields (split-commas (require-argument argument "dstretch" "lds,6")))
+         (space (keyword-for-decorrelation-space (first fields)))
+         (scale (if (rest fields)
+                    (parse-number (second fields) "dstretch scale")
+                    6.0d0))
+         (destination (im:create-based image)))
+    (im:decorrelation-stretch image destination
+                              :space space
+                              :scale (coerce scale 'double-float))
     destination))
 
 (define-operation "depth" (image argument) "byte|ushort|float|..."
