@@ -309,7 +309,8 @@ jobs:
     name: Publish the release
     needs: build
     # Publish even if some platforms failed, as long as one produced a binary;
-    # `needs` alone would skip this whenever any matrix leg failed.
+    # `needs` alone would skip this whenever any matrix leg failed. An
+    # incomplete set is published as a prerelease -- see "Check what was built".
     if: always()
     runs-on: ubuntu-latest
 
@@ -323,11 +324,35 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      - name: Check something was built
+      - name: Check what was built
+        id: assets
         run: |
           ls -lR dist/
           test -n "$(find dist -type f)" || {
             echo "::error::every platform failed; nothing to publish"; exit 1; }
+
+          # Three binaries still beat none, so an incomplete set is published --
+          # but it must never present itself as a finished release. v0.7.1 went
+          # out as Latest carrying one binary out of four because "something was
+          # built" was the only gate, and a user landing on it had no way to see
+          # that three platforms were missing.
+          missing=""
+          for want in im-linux-amd64 im-linux-arm64 im-macos-arm64 im-windows-x64; do
+            find dist -type f -name "$want*" | grep -q . || missing="$missing $want"
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::warning::incomplete release; missing:$missing"
+            {
+              echo "complete=false"
+              echo "missing=$missing"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "complete=true"
+              echo "missing="
+            } >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Publish
         env:
@@ -368,12 +393,38 @@ jobs:
 
           # Recreate rather than fail when re-running a tag after fixing one
           # platform's job.
+          # An incomplete set ships as a prerelease, so it is never Latest and
+          # says which platforms are absent. A later rerun that completes the
+          # set promotes it.
+          if [ "${{ steps.assets.outputs.complete }}" != true ]; then
+            {
+              echo
+              echo "> [!WARNING]"
+              echo "> Incomplete release: no binary for${{ steps.assets.outputs.missing }}."
+              echo "> Those platforms failed to build. Rerun the Release workflow"
+              echo "> against this tag to complete it."
+            } >> notes.md
+          fi
+
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag exists; replacing its assets."
             gh release upload "$tag" dist/* --clobber
+            if [ "${{ steps.assets.outputs.complete }}" = true ]; then
+              gh release edit "$tag" --prerelease=false --latest
+            else
+              gh release edit "$tag" --prerelease
+            fi
           else
-            gh release create "$tag" dist/* \
-              --title "im $tag" \
-              --notes-file notes.md \
-              --verify-tag
+            if [ "${{ steps.assets.outputs.complete }}" = true ]; then
+              gh release create "$tag" dist/* \
+                --title "im $tag" \
+                --notes-file notes.md \
+                --verify-tag
+            else
+              gh release create "$tag" dist/* \
+                --title "im $tag (incomplete)" \
+                --notes-file notes.md \
+                --verify-tag \
+                --prerelease
+            fi
           fi
