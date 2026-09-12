@@ -6,6 +6,10 @@ line tool that drives them.
 
 This project is unaffiliated with Tecgraf.
 
+Requires **tecgraf-im v2.1.1 or later**: v0.7.0 binds the decorrelation stretch,
+which earlier releases do not export. (v2.1.0 nominally has it but its release
+carries only the macOS and Windows builds, so v2.1.1 is the first usable one.)
+
 Built against [lispnik/tecgraf-im](https://github.com/lispnik/tecgraf-im), a
 CMake fork of IM 3.15. The bindings cover **456 C functions** — every function
 exported by `libim`, `libim_process`, `libim_capture`, `libim_fftw3` and the
