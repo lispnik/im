@@ -16,7 +16,15 @@ name: CI (upstream HEAD)
 on:
   repository_dispatch:
     types: [tecgraf-im-build-complete]
+  # Runnable by hand as well, to re-test upstream without waiting for a commit
+  # there. The two paths fetch differently and are NOT equivalent -- see the
+  # download steps below.
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch of lispnik/tecgraf-im to take libraries from"
+        required: false
+        default: master
 
 jobs:
   test:
@@ -165,12 +173,40 @@ jobs:
       # the rest of this workflow expects the libraries flat in im-libs/, which
       # is the shape the CI artifact had. Flatten rather than teach every later
       # step about both layouts.
+      # Two ways in, and they must not be confused.
+      #
+      # A repository_dispatch carries the run id per platform, so every
+      # platform's libraries come from ONE upstream commit. That is the whole
+      # reason the payload exists and it is what makes a red run here mean
+      # "that commit broke us".
+      #
+      # A manual run has no payload. It takes the newest successful run of each
+      # upstream workflow instead, exactly as release.yml does, which means the
+      # four platforms can straddle commits if upstream pushed while this ran.
+      # Good enough for "does upstream master still work", not good enough to
+      # blame a specific commit.
+      #
+      # Previously this step used the payload unconditionally while the
+      # workflow also advertised workflow_dispatch, so a manual run resolved
+      # run_id to empty and every platform failed here before running anything.
       - name: Download IM libraries (from the dispatching run)
+        if: github.event_name == 'repository_dispatch'
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           repo: lispnik/tecgraf-im
           run_id: ${{ github.event.client_payload[matrix.run-id-key] }}
+          name: ${{ matrix.im-artifact }}
+          path: im-libs/
+
+      - name: Download IM libraries (latest successful upstream run)
+        if: github.event_name != 'repository_dispatch'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repo: lispnik/tecgraf-im
+          workflow: ${{ matrix.im-workflow }}
+          branch: ${{ github.event.inputs.ref || 'master' }}
           name: ${{ matrix.im-artifact }}
           path: im-libs/
 
