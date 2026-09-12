@@ -409,10 +409,24 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag exists; replacing its assets."
             gh release upload "$tag" dist/* --clobber
+            # Reset the title and notes as well as the flag. Clearing
+            # --prerelease alone leaves a completed release still titled
+            # "(incomplete)" and still carrying the warning naming platforms
+            # that have since been built -- which is exactly what happened to
+            # v0.7.1: four assets, Latest, and notes insisting amd64 was
+            # missing. notes.md is regenerated every run and only carries the
+            # warning when the set is short, so passing it here is correct in
+            # both directions.
             if [ "${{ steps.assets.outputs.complete }}" = true ]; then
-              gh release edit "$tag" --prerelease=false --latest
+              gh release edit "$tag" \
+                --title "im $tag" \
+                --notes-file notes.md \
+                --prerelease=false --latest
             else
-              gh release edit "$tag" --prerelease
+              gh release edit "$tag" \
+                --title "im $tag (incomplete)" \
+                --notes-file notes.md \
+                --prerelease
             fi
           else
             if [ "${{ steps.assets.outputs.complete }}" = true ]; then
