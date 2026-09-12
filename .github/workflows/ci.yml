@@ -108,8 +108,51 @@ jobs:
 
       - name: Restore dependencies
         run: |
-          ocicl setup
-          ocicl install          # the versions pinned in ocicl.csv
+          # ocicl install reports a per-system failure and still exits 0:
+          #
+          #   ; error downloading and installing ghcr.io/ocicl/cffi@sha256:...
+          #   ; failed to install cffi from ghcr.io/ocicl/cffi@sha256:...
+          #
+          # That is not hypothetical. It turned this step green while cffi,
+          # alexandria, fiveam, trivial-garbage and shasht were missing; the
+          # build then died in ASDF with MISSING-DEPENDENCY on three of four
+          # platforms, and because the publish job does not depend on the
+          # builds, v0.7.1 went out as Latest carrying one binary out of four.
+          #
+          # ghcr.io fails per system, per runner, at random -- in one run the
+          # platform that succeeded and the platforms that failed swapped
+          # around -- so retry first, then fail loudly rather than leaving a
+          # green step in front of a broken build.
+          for attempt in 1 2 3; do
+            ocicl setup
+            ocicl install 2>&1 | tee ocicl-install.log || true
+            if ! grep -qE "failed to install|error downloading and installing" ocicl-install.log; then
+              ok=yes; break
+            fi
+            echo "::warning::ocicl reported install failures on attempt $attempt; retrying"
+            sleep $((attempt * 10))
+          done
+          if [ "${ok:-no}" != yes ]; then
+            echo "::error::ocicl could not install every dependency after 3 attempts"
+            grep -E "failed to install|error downloading and installing" ocicl-install.log || true
+            exit 1
+          fi
+
+          # Positive check: the above only catches what ocicl noticed. Ask ASDF
+          # whether the systems the build actually needs resolve.
+          tree="$PWD"
+          if [ "$RUNNER_OS" = Windows ]; then tree="$(cygpath -m "$tree")"; fi
+          sbcl --non-interactive --no-userinit --no-sysinit \
+            --eval '(require :asdf)' \
+            --eval "(asdf:initialize-source-registry '(:source-registry (:tree \"$tree\") :ignore-inherited-configuration))" \
+            --eval '(handler-case
+                        (progn (mapc (function asdf:find-system)
+                                     (list "alexandria" "cffi" "fiveam" "trivial-garbage"
+                                           "shasht" "clingon" "cl-ppcre"))
+                               (format t "~&all direct dependencies resolve~%"))
+                      (error (e)
+                        (format *error-output* "~&::error::dependency does not resolve: ~A~%" e)
+                        (uiop:quit 1)))'
 
       # The release archive is an installed tree -- lib/ and include/ -- while
       # the rest of this workflow expects the libraries flat in im-libs/, which
