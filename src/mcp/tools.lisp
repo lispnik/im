@@ -173,3 +173,101 @@ a PNG. `columns' defaults to roughly square; `tile' is WxH per cell."
                                      (+ gap (* row (+ th gap)) (floor (- th (im:height thumb)) 2))))))
         (list (image-content (image->png-base64 canvas))
               (text-content "contact sheet of ~D image~:P, ~D column~:P" count cols))))))
+
+(define-tool "im_analyze"
+    "Count the objects in an image and measure them. Binarises, labels the
+connected regions and reports how many there are plus per-region measurements.
+`measure' selects which: area, centroid, bbox, hull, feret, intensity, or all.
+Set `watershed' to split objects that touch, which plain labelling cannot --
+two overlapping discs are one connected region and two objects. This is the
+question a thumbnail cannot answer: how many things are in this picture, where
+are they, and how big."
+    (schema (list "path" (prop "string" "Path to the image file")
+                  "threshold" (prop "string"
+                                    "How to binarise first: `otsu' (default) or a level")
+                  "connectivity" (prop "integer" "Region connectivity, 4 or 8 (default 8)")
+                  "watershed" (prop "boolean"
+                                    "Separate touching objects before measuring (default false)")
+                  "keep_border" (prop "boolean"
+                                      "Include regions touching the image border (default false;
+always true when watershed is set, which cannot exclude them)")
+                  "measure" (prop "string"
+                                  "Comma-separated measurements, or `all'. One of area, centroid,
+bbox, hull, feret, intensity. Default `area,centroid'.")
+                  "limit" (prop "integer"
+                                "Report at most this many regions; 0 for all (default 20)"))
+            :required '("path"))
+    (args)
+  ;; Straight through to the function behind `im analyze', for the reason
+  ;; given at the head of this file: one implementation, two front ends. It
+  ;; returns the same plist the CLI renders, so the JSON here and the JSON from
+  ;; `im analyze --json' are the same document.
+  (let ((connectivity (or (arg args "connectivity") 8))
+        (limit (or (arg args "limit") 20)))
+    (unless (member connectivity '(4 8))
+      (error "connectivity must be 4 or 8, got ~A" connectivity))
+    (unless (and (integerp limit) (not (minusp limit)))
+      (error "limit must be a non-negative integer, got ~A" limit))
+    (list (text-content
+           "~A"
+           (json-string
+            (im.cli::analyze-image
+             (pathname (required-arg args "path"))
+             :threshold (or (arg args "threshold") "otsu")
+             :connectivity connectivity
+             :keep-border (and (arg args "keep_border") t)
+             :watershed (and (arg args "watershed") t)
+             ;; Validates, and signals a USAGE-ERROR naming the alternatives --
+             ;; which DISPATCH turns into an isError result the model can read
+             ;; and correct, rather than a protocol error.
+             :measurements (im.cli::parse-measurements
+                            (or (arg args "measure") "area,centroid"))
+             :limit limit))))))
+
+(define-tool "im_process"
+    "Apply a pipeline of image operations and return the result inline as a
+PNG. `ops' is a list of `name' or `name=argument' steps applied IN ORDER, the
+same vocabulary `im process --op' takes: resize, crop, rotate, mirror, flip,
+colorspace, depth, negative, gaussian, median, sobel, prewitt, canny, unsharp,
+bilateral, diffusion, nlmeans, deconvolve, threshold, erode, dilate, open,
+close, watershed, dstretch, spectrum. Give `output' to also write the full-size
+result to a file; the inline image is a preview and is scaled down to fit
+`preview' pixels on its longest side."
+    (schema (list "path" (prop "string" "Path to the input image")
+                  "ops" (obj "type" "array" "items" (obj "type" "string")
+                             "description"
+                             "Operations in order, e.g. [\"threshold=otsu\", \"watershed\"]")
+                  "output" (prop "string" "Optional path to write the full-size result to")
+                  "preview" (prop "integer"
+                                  "Longest side of the returned preview, in pixels (default 512)"))
+            :required '("path" "ops"))
+    (args)
+  (let ((ops (coerce (required-arg args "ops") 'list))
+        (preview (or (arg args "preview") 512))
+        (output (arg args "output")))
+    (unless ops (error "ops needs at least one operation"))
+    (unless (and (integerp preview) (plusp preview))
+      (error "preview must be a positive integer, got ~A" preview))
+    (im:with-image (source (im:load (pathname (required-arg args "path"))))
+      ;; RUN-PIPELINE owns every intermediate and destroys it as it goes, but
+      ;; the final image is the caller's -- and it is SOURCE itself when every
+      ;; operation was a no-op, which is why this cannot destroy it blindly.
+      (let ((result (im.cli::run-pipeline source ops)))
+        (unwind-protect
+             (progn
+               (when output (im:save result (pathname output)))
+               (im:with-image (thumb (im.cli::%fit-thumbnail result preview preview))
+                 (list (image-content (image->png-base64 thumb))
+                       (text-content
+                        "~A"
+                        (json-string
+                         (list :input (pathname (required-arg args "path"))
+                               :operations (coerce ops 'vector)
+                               :width (im:width result)
+                               :height (im:height result)
+                               :color-space (im:color-space result)
+                               :data-type (im:data-type result)
+                               :output (when output (pathname output))
+                               :preview-width (im:width thumb)
+                               :preview-height (im:height thumb)))))))
+          (unless (eq result source) (im:destroy result)))))))

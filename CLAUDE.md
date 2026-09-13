@@ -39,7 +39,7 @@ specific build; otherwise Homebrew's `tecgraf-im` is usually found.
 |---|---|
 | `im` | The binding: `src/ffi/` (raw) plus `src/*.lisp` (the Lisp API) |
 | `im/cli` | `im(1)`. `program-op` → `bin/im`, entry point `im.cli:main` |
-| `im/mcp` | MCP server. `program-op` → `bin/im-mcp`, entry point `im.mcp:main`. Reuses `im/cli`'s diff/montage image algebra rather than duplicating it |
+| `im/mcp` | MCP server. `program-op` → `bin/im-mcp`, entry point `im.mcp:main`. Calls into `im/cli` rather than duplicating it — the hashes and SSIM behind `im diff`, the compositing behind `im montage`, and for `im_analyze` and `im_process` the very functions those subcommands use |
 | `im/tests` | FiveAM suite |
 
 `im/cli`'s components live in a `:module` rather than under a system-level
@@ -189,7 +189,7 @@ order decide.
 
 ## Tests
 
-`tests/`, one file per area, 461 checks. Beyond the obvious coverage they
+`tests/`, one file per area, 496 checks. Beyond the obvious coverage they
 assert the things that previously went untested: the condition hierarchy, the
 restart protocol, finalizer and double-destroy behaviour, that every binding
 resolves against the loaded libraries, and — by running `bin/im` as a

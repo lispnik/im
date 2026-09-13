@@ -178,18 +178,49 @@ im montage shots/*.png --output sheet.png --columns 4 --tile 200x200
 ## The MCP server
 
 `bin/im-mcp` (built by `make`) is a Model Context Protocol server, so an agent
-can inspect and transform images through the same binding. It speaks JSON-RPC
-over stdio and exposes `im_info`, `im_stats`, `im_formats`, `im_diff`,
-`im_thumbnail` and `im_montage` — and the last two return the image *inline*,
-so the agent gets the picture, not a path it cannot open. Point an MCP client
+can inspect, measure and transform images through the same binding. It speaks
+JSON-RPC over stdio and exposes eight tools:
+
+| Tool | What it answers |
+|---|---|
+| `im_info` | format, dimensions, colour space, data type, frames |
+| `im_stats` | per-plane min, max, mean, stddev |
+| `im_formats` | what this build can read and write |
+| `im_diff` | are these the same picture — RMSE, PSNR, SSIM, perceptual hashes |
+| `im_thumbnail` | the picture itself, inline |
+| `im_montage` | many pictures as one contact sheet, inline |
+| `im_analyze` | how many objects, where, and how big |
+| `im_process` | a pipeline of operations, result inline |
+
+`im_thumbnail`, `im_montage` and `im_process` return the image *inline*, so the
+agent gets the picture rather than a path it cannot open. Point an MCP client
 at the executable:
 
 ```json
 { "command": "/path/to/bin/im-mcp" }
 ```
 
-It reuses the image algebra behind `im diff` and `im montage` rather than
-reimplementing it, so the command line and the agent interface cannot drift.
+`im_analyze` is the one that answers a question no thumbnail can. Counting
+objects, measuring them, and separating the ones that touch is not something a
+model can do by looking:
+
+```json
+{ "name": "im_analyze",
+  "arguments": { "path": "cells.png", "watershed": true, "measure": "all" } }
+```
+
+`im_process` takes the same `--op` vocabulary as `im process`, applied in
+order, and returns a scaled preview inline — with `output` to write the
+full-size result somewhere:
+
+```json
+{ "name": "im_process",
+  "arguments": { "path": "noisy.png", "ops": ["bilateral=3,25", "unsharp=2,1,0"] } }
+```
+
+Every tool reuses the image algebra behind `im(1)` rather than reimplementing
+it — `im_analyze` and `im_process` call the very functions `im analyze` and
+`im process` do — so the command line and the agent interface cannot drift.
 
 ## The library
 

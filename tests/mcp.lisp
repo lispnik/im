@@ -47,7 +47,8 @@ wrote nothing (a notification)."
   (let* ((reply (mcp "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
          (tools (gethash "tools" (gethash "result" reply)))
          (names (map 'list (lambda (h) (gethash "name" h)) tools)))
-    (dolist (want '("im_info" "im_stats" "im_diff" "im_thumbnail" "im_montage" "im_formats"))
+    (dolist (want '("im_info" "im_stats" "im_diff" "im_thumbnail" "im_montage" "im_formats"
+                    "im_analyze" "im_process"))
       (is (member want names :test #'string=) "~A is advertised" want))
     ;; every tool carries a JSON-Schema object with a type
     (is (every (lambda (h) (equal "object" (gethash "type" (gethash "inputSchema" h)))) tools))))
@@ -96,3 +97,96 @@ not a path it cannot open."
          (result (gethash "result" reply)))
     (is (null (gethash "error" reply)) "not a JSON-RPC error")
     (is (eq t (gethash "isError" result)) "the result is flagged as an error")))
+
+;;; The processing tools -------------------------------------------------------
+
+(defun mcp-text (reply)
+  "The text content of a tools/call reply, concatenated."
+  (let ((content (gethash "content" (gethash "result" reply))))
+    (with-output-to-string (out)
+      (loop for item across content
+            when (equal "text" (gethash "type" item))
+              do (write-string (gethash "text" item) out)))))
+
+(defun mcp-error-p (reply)
+  (gethash "isError" (gethash "result" reply)))
+
+(test im-analyze-tool-counts-and-measures-regions
+  "The question a thumbnail cannot answer: how many objects, and how big."
+  (let* ((reply (mcp-call "im_analyze"
+                          (format nil "{\"path\":~A,\"measure\":\"all\",\"limit\":1}"
+                                  (image-json "rice.png"))))
+         (report (shasht:read-json (mcp-text reply))))
+    (is (not (mcp-error-p reply)))
+    (is (> (gethash "region-count" report) 10)
+        "rice.png carries dozens of grains")
+    (is (equal "connected-components" (gethash "method" report)))
+    (let ((region (aref (gethash "regions" report) 0)))
+      ;; One field per measurement family, so a silently dropped family fails.
+      (dolist (field '("area" "x" "xmin" "hull-area" "max-feret" "intensity-mean"))
+        (is-true (nth-value 1 (gethash field region))
+                 "--measure all must report ~A" field)))))
+
+(test im-analyze-tool-splits-touching-objects-on-request
+  "watershed is the reason this tool is worth having over `count the blobs'.
+
+Touching grains are one connected region each and several objects, so the
+count must go UP and the reported method must say which produced it."
+  (let* ((plain (shasht:read-json
+                 (mcp-text (mcp-call "im_analyze"
+                                     (format nil "{\"path\":~A,\"limit\":0}"
+                                             (image-json "rice.png"))))))
+         (split (shasht:read-json
+                 (mcp-text (mcp-call "im_analyze"
+                                     (format nil "{\"path\":~A,\"limit\":0,\"watershed\":true}"
+                                             (image-json "rice.png")))))))
+    (is (equal "watershed" (gethash "method" split)))
+    (is (> (gethash "region-count" split) (gethash "region-count" plain)))))
+
+(test im-analyze-tool-reports-a-bad-measurement-as-a-tool-error
+  "A wrong argument is an isError result naming the alternatives, not a crash
+and not a protocol error -- the model is meant to read it and try again."
+  (let ((reply (mcp-call "im_analyze"
+                         (format nil "{\"path\":~A,\"measure\":\"nope\"}"
+                                 (image-json "rice.png")))))
+    (is-true (mcp-error-p reply))
+    (is (search "unknown measurement" (mcp-text reply)))))
+
+(test im-process-tool-runs-a-pipeline-and-returns-an-image
+  "Including an operation added in this release, so the tool cannot pass
+against a build that lacks it."
+  (let* ((reply (mcp-call "im_process"
+                          (format nil "{\"path\":~A,\"ops\":[\"threshold=otsu\",\"watershed\"]}"
+                                  (image-json "rice.png"))))
+         (content (gethash "content" (gethash "result" reply)))
+         (image (find "image" content :key (lambda (h) (gethash "type" h)) :test #'equal))
+         (report (shasht:read-json (mcp-text reply))))
+    (is (not (mcp-error-p reply)))
+    (is-true image "the result carries an inline image")
+    (is (equal "image/png" (gethash "mimeType" image)))
+    (is (plusp (length (gethash "data" image))))
+    ;; A watershed writes a label image, so the pipeline really ran.
+    (is (equal "data-type-ushort" (gethash "data-type" report)))
+    (is (= 256 (gethash "width" report)) "the reported size is the full one")))
+
+(test im-process-tool-scales-the-preview-and-can-write-the-full-size-result
+  "The inline image is a preview; `output' is how the full-size result escapes."
+  (let* ((out (namestring (tmp-file "mcp-process.png")))
+         (reply (mcp-call "im_process"
+                          (format nil "{\"path\":~A,\"ops\":[\"gaussian=1.5\"],~
+                                       \"preview\":64,\"output\":\"~A\"}"
+                                  (image-json "rice.png") out)))
+         (report (shasht:read-json (mcp-text reply))))
+    (is (not (mcp-error-p reply)))
+    (is (<= (gethash "preview-width" report) 64))
+    (is (= 256 (gethash "width" report)) "the preview must not shrink the real result")
+    (is-true (probe-file out) "output was written")
+    (im:with-image (written (im:load (pathname out)))
+      (is (= 256 (im:width written)) "the file is full size, not the preview"))))
+
+(test im-process-tool-rejects-an-unknown-operation
+  (let ((reply (mcp-call "im_process"
+                         (format nil "{\"path\":~A,\"ops\":[\"nosuchop\"]}"
+                                 (image-json "rice.png")))))
+    (is-true (mcp-error-p reply))
+    (is (search "unknown operation" (mcp-text reply)))))
