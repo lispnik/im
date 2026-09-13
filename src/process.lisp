@@ -22,6 +22,12 @@
           convolve-median
           canny
           unsharp
+          denoise-bilateral
+          denoise-anisotropic-diffusion
+          denoise-non-local-means
+          *diffusion-functions*
+          render-gaussian
+          deconvolve-richardson-lucy
           threshold
           threshold-otsu
           morph-erode
@@ -42,8 +48,14 @@
           count-colors
           find-regions
           make-label-image
+          watershed
+          watershed-segment
           region-areas
           region-centroids
+          region-bounding-boxes
+          region-convex-hulls
+          region-feret-diameters
+          region-intensities
           decorrelation-stretch
           decorrelation-fit
           decorrelation-apply
@@ -147,6 +159,185 @@ Thresholds are estimated by IM; DST must be a one-plane image."
   (coerce stddev 'double-float)
   (coerce amount 'double-float)
   (coerce threshold 'double-float))
+
+;;; Edge-preserving denoising and deconvolution ------------------------------
+;;;
+;;; The four functions here check their arguments before calling, which the
+;;; rest of this file leaves to IM. They have to: each of these C entry points
+;;; validates its preconditions and reports a violation by returning
+;;; IM_PROCESS_ABORT -- the same zero the progress counter returns when the
+;;; user cancels. Passed straight through, an even-sided PSF or a time step of
+;;; 0.5 would arrive as OPERATION-ABORTED saying the operation was cancelled,
+;;; which is the wrong diagnosis for a wrong argument.
+
+(defun %check-same-type-size (src dst what)
+  (unless (and (= (width src) (width dst))
+               (= (height src) (height dst))
+               (eq (data-type src) (data-type dst))
+               (= (depth src) (depth dst)))
+    (cl:error 'data-error
+              :detail (format nil "~A needs images of the same size and type, got ~Dx~D ~(~A~) and ~Dx~D ~(~A~)"
+                              what
+                              (width src) (height src) (data-type src)
+                              (width dst) (height dst) (data-type dst))))
+  (when (complex-image-p src)
+    (cl:error 'data-error
+              :detail (format nil "~A does not support complex samples" what))))
+
+(defun denoise-bilateral (src dst spatial-stddev range-stddev)
+  "Bilateral filter: Gaussian smoothing that does not average across an edge.
+
+SPATIAL-STDDEV is in pixels and sets the neighbourhood. RANGE-STDDEV is in the
+image's own sample units and is the whole of the difference from a plain
+Gaussian: a neighbour further than about that from the centre pixel's value
+barely contributes, so a step survives. Set it near the noise level -- much
+above it and texture flattens into patches. Cost grows with the square of
+SPATIAL-STDDEV.
+
+SRC and DST may be the same image."
+  (%check-same-type-size src dst "denoise-bilateral")
+  (unless (and (plusp spatial-stddev) (plusp range-stddev))
+    (cl:error 'data-error
+              :detail (format nil "bilateral needs positive standard deviations, got ~A and ~A"
+                              spatial-stddev range-stddev)))
+  (check-operation "denoise-bilateral"
+    (not (zerop (im.ffi::%im-process-bilateral-filter
+                 (handle src) (handle dst)
+                 (coerce spatial-stddev 'double-float)
+                 (coerce range-stddev 'double-float))))))
+
+(defparameter *diffusion-functions*
+  '(:exponential :quadratic :tukey)
+  "The conductance functions IM:DENOISE-ANISOTROPIC-DIFFUSION accepts.
+
+Short names rather than the enum's :DIFFUSION-FUNC-EXPONENTIAL spelling. The
+fully-prefixed form is right for a data type or a colour space, which appear
+in output and read as their own nouns; this one is a private choice of one of
+three formulas and never leaves the call. Same trade as *COMPLEX-PARTS*.")
+
+(defparameter %diffusion-function-keywords
+  '((:exponential . :diffusion-func-exponential)
+    (:quadratic   . :diffusion-func-quadratic)
+    (:tukey       . :diffusion-func-tukey))
+  "Short name to generated enum keyword.
+
+The value handed to C comes from the enum rather than from a position in
+*DIFFUSION-FUNCTIONS*, so a reordering upstream is picked up by regenerating
+src/ffi/ instead of silently selecting the wrong formula.")
+
+(defun %diffusion-function-value (function)
+  (let ((keyword (cdr (assoc function %diffusion-function-keywords))))
+    (unless keyword
+      (cl:error 'im-error
+                :detail (format nil "~S is not a diffusion function; expected one of ~S"
+                                function *diffusion-functions*)))
+    (cffi:foreign-enum-value 'im.ffi::diffusion-func keyword)))
+
+(defun denoise-anisotropic-diffusion (src dst &key (time-step 0.2d0) (kappa 30.0d0)
+                                                   (iterations 10)
+                                                   (function :exponential))
+  "Perona-Malik anisotropic diffusion: smooth within regions, not across edges.
+
+KAPPA is the gradient threshold in the image's own sample units -- a step
+larger than it is treated as an edge and stops conducting, so edges survive
+and sharpen while flat regions smooth. FUNCTION picks the conductance formula:
+:EXPONENTIAL favours high-contrast edges, :QUADRATIC favours wide regions, and
+:TUKEY has compact support, so an edge above KAPPA stops moving entirely.
+
+TIME-STEP must be in (0, 0.25]. The scheme is explicit and unstable above a
+quarter with four neighbours, where it diverges into a checkerboard rather
+than reporting anything -- which is why the bound is checked here and not left
+to the caller to discover.
+
+SRC and DST may be the same image."
+  (%check-same-type-size src dst "denoise-anisotropic-diffusion")
+  (unless (and (plusp time-step) (<= time-step 0.25d0))
+    (cl:error 'data-error
+              :detail (format nil "diffusion time step must be in (0, 0.25], got ~A"
+                              time-step)))
+  (unless (plusp kappa)
+    (cl:error 'data-error
+              :detail (format nil "diffusion kappa must be positive, got ~A" kappa)))
+  (unless (and (integerp iterations) (not (minusp iterations)))
+    (cl:error 'data-error
+              :detail (format nil "diffusion iterations must be a non-negative integer, got ~S"
+                              iterations)))
+  (check-operation "denoise-anisotropic-diffusion"
+    (not (zerop (im.ffi::%im-process-anisotropic-diffusion
+                 (handle src) (handle dst)
+                 (coerce time-step 'double-float)
+                 (coerce kappa 'double-float)
+                 iterations
+                 (%diffusion-function-value function))))))
+
+(defun denoise-non-local-means (src dst &key (search-radius 5) (patch-radius 2)
+                                             (filter-stddev 10.0d0))
+  "Non-local means: average pixels whose NEIGHBOURHOODS match, not their neighbours.
+
+Repeated fine structure -- brickwork, fabric, text -- is recovered rather than
+smoothed away, because the pixels that vote for a given pixel are the ones
+sitting in a similar patch, wherever in the search window they are.
+FILTER-STDDEV is the weight decay in the image's own sample units; start at the
+noise standard deviation.
+
+Cost grows with SEARCH-RADIUS squared times PATCH-RADIUS squared, which makes
+this one to two orders of magnitude slower than the other two filters here.
+The defaults are the usual starting point.
+
+SRC and DST may be the same image."
+  (%check-same-type-size src dst "denoise-non-local-means")
+  (unless (and (plusp search-radius) (plusp patch-radius) (plusp filter-stddev))
+    (cl:error 'data-error
+              :detail (format nil "non-local means needs positive radii and stddev, got ~A, ~A and ~A"
+                              search-radius patch-radius filter-stddev)))
+  (check-operation "denoise-non-local-means"
+    (not (zerop (im.ffi::%im-process-non-local-means
+                 (handle src) (handle dst)
+                 search-radius patch-radius
+                 (coerce filter-stddev 'double-float))))))
+
+(defun render-gaussian (image stddev)
+  "Fill IMAGE with a centred Gaussian of the given standard deviation. Returns IMAGE.
+
+Here because it is how a point spread function is built: IM normalizes the PSF
+to sum 1 internally, so a rendered Gaussian of odd dimensions is a usable
+argument to DECONVOLVE-RICHARDSON-LUCY without any scaling."
+  (check-operation "render-gaussian"
+    (not (zerop (im.ffi::%im-process-render-gaussian
+                 (handle image) (coerce stddev 'double-float)))))
+  image)
+
+(defun deconvolve-richardson-lucy (src psf dst &key (iterations 20))
+  "Richardson-Lucy deconvolution of SRC by the point spread function PSF.
+
+The maximum-likelihood restoration under Poisson noise, which is what a
+photon-counting detector has. PSF must be a one-plane image with BOTH
+dimensions odd -- an even-sided kernel has no centre pixel, so the result
+would come out shifted half a pixel with nothing to say so -- and is
+normalized to sum 1 internally.
+
+ITERATIONS is the only regularisation there is. The iteration does not
+converge to something pleasant: past a few tens of steps it fits the noise,
+which shows as ringing around bright features that grows with every further
+one. 10 to 50 is the usual range.
+
+SRC and DST may be the same image."
+  (%check-same-type-size src dst "deconvolve-richardson-lucy")
+  (unless (= 1 (depth psf))
+    (cl:error 'data-error
+              :detail (format nil "the point spread function must have one plane, got ~D"
+                              (depth psf))))
+  (unless (and (oddp (width psf)) (oddp (height psf)))
+    (cl:error 'data-error
+              :detail (format nil "the point spread function must have odd dimensions, got ~Dx~D"
+                              (width psf) (height psf))))
+  (unless (and (integerp iterations) (not (minusp iterations)))
+    (cl:error 'data-error
+              :detail (format nil "deconvolution iterations must be a non-negative integer, got ~S"
+                              iterations)))
+  (check-operation "deconvolve-richardson-lucy"
+    (not (zerop (im.ffi::%im-process-richardson-lucy
+                 (handle src) (handle psf) (handle dst) iterations)))))
 
 ;;; Thresholding --------------------------------------------------------------
 
@@ -595,8 +786,116 @@ indexed 0..COUNT-1 for regions 1..COUNT."
                      (if touch-border 1 0) count))))
       (values destination (cffi:mem-ref count :int)))))
 
+;;; Watershed segmentation ----------------------------------------------------
+;;;
+;;; What FIND-REGIONS cannot do. Two objects that touch are one connected
+;;; region, and no amount of labelling makes them two; a watershed floods the
+;;; image from markers and splits the pair along the neck between them.
+;;;
+;;; Like the denoising filters above, these check their arguments rather than
+;;; passing a precondition violation through as a cancellation -- a marker
+;;; image of the wrong data type otherwise arrives as OPERATION-ABORTED.
+
+(defun %check-label-image (image what role)
+  (unless (and (eq :color-space-gray (color-space image))
+               (eq :data-type-ushort (data-type image)))
+    (cl:error 'data-error
+              :detail (format nil "~A needs a gray ushort ~A, got ~(~A~) ~(~A~)"
+                              what role (color-space image) (data-type image)))))
+
+(defun %check-connectivity (connectivity what)
+  (unless (member connectivity '(4 8))
+    (cl:error 'data-error
+              :detail (format nil "~A connectivity must be 4 or 8, got ~S"
+                              what connectivity))))
+
+(defun %check-same-size (a b what)
+  (unless (and (= (width a) (width b)) (= (height a) (height b)))
+    (cl:error 'data-error
+              :detail (format nil "~A needs images of the same size, got ~Dx~D and ~Dx~D"
+                              what (width a) (height a) (width b) (height b)))))
+
+(defun watershed (src markers dst &key (connectivity 8) (mark-lines nil))
+  "Flood SRC from the labelled MARKERS, writing one label per pixel into DST.
+
+SRC is read as a relief map and flooded lowest ground first, so every pixel
+joins the marker whose water reached it. LOW values are flooded first, which
+means the basins have to be the features of interest -- NEGATIVE the image
+first if they are not, or the segmentation comes out inside out.
+
+SRC is one-plane gray of any real type. MARKERS and DST are gray ushort,
+MARKERS labelled as FIND-REGIONS labels with 0 for unmarked; DST may be the
+same image as MARKERS. With MARK-LINES true a pixel two basins reach at once
+is left 0 and belongs to neither, drawing one-pixel watershed lines.
+
+A region no marker seeds is never labelled: this segments the markers given,
+it does not find them. WATERSHED-SEGMENT is the usual way to get markers."
+  (%check-same-size src markers "watershed")
+  (%check-same-size src dst "watershed")
+  (unless (= 1 (depth src))
+    (cl:error 'data-error
+              :detail (format nil "watershed needs a one-plane relief image, got ~D planes"
+                              (depth src))))
+  (%check-label-image markers "watershed" "marker image")
+  (%check-label-image dst "watershed" "destination")
+  (%check-connectivity connectivity "watershed")
+  (check-operation "watershed"
+    (not (zerop (im.ffi::%im-process-watershed
+                 (handle src) (handle markers) (handle dst)
+                 connectivity (if mark-lines 1 0)))))
+  dst)
+
+(defun watershed-segment (src &optional dst &key (connectivity 8) (mark-lines nil))
+  "Split touching objects in the binary SRC and label them. Returns (VALUES DST COUNT).
+
+The same call shape and the same kind of result as FIND-REGIONS -- gray ushort
+labels, one per object, which every REGION-* measurement below reads directly
+-- but objects that touch come out as separate labels rather than as one
+region. IM does it by distance transform, regional maxima for the centres, and
+a watershed of the negated distance map seeded from those.
+
+Objects touching the border are always included, unlike FIND-REGIONS, which
+can be asked to drop them. MARK-LINES leaves a one-pixel gap of 0 between
+objects.
+
+Its characteristic failure is worth knowing: a strongly concave object can
+carry more than one distance maximum and be split in two, and nothing in the
+output says so. Convex objects of similar size separate cleanly."
+  (unless (eq :color-space-binary (color-space src))
+    (cl:error 'data-error
+              :detail (format nil "watershed-segment needs a binary source, got ~(~A~)"
+                              (color-space src))))
+  (let ((destination (or dst (make-label-image src))))
+    (%check-same-size src destination "watershed-segment")
+    (%check-label-image destination "watershed-segment" "destination")
+    (%check-connectivity connectivity "watershed-segment")
+    (cffi:with-foreign-object (count :int)
+      (check-operation "watershed-segment"
+        (not (zerop (im.ffi::%im-process-watershed-segment
+                     (handle src) (handle destination)
+                     connectivity (if mark-lines 1 0) count))))
+      (values destination (cffi:mem-ref count :int)))))
+
+;;; Region measurement ------------------------------------------------------
+;;;
+;;; Every REGION-* function takes the count separately from the image, because
+;;; nothing in an imImage records how many regions it carries -- the count
+;;; comes back from FIND-REGIONS or WATERSHED-SEGMENT and it is the caller's
+;;; job to keep the two together.
+;;;
+;;; A count BELOW the highest label measures the first REGION-COUNT regions
+;;; and ignores the rest, which is a supported way to ask for a prefix. It was
+;;; not always: up to tecgraf-im v2.2.0 the six older measurements indexed
+;;; their output arrays by label with no range check, so a short count wrote
+;;; past the end. The binding carried a scan for the highest label to refuse
+;;; that; v2.2.1 range-checks in C, so the scan is gone and the call is
+;;; legal. See the minimum version in README.md.
+
 (defun region-areas (labelled region-count)
-  "A vector of pixel areas, one per region, for a LABELLED image."
+  "A vector of pixel areas, one per region, for a LABELLED image.
+
+A REGION-COUNT below the highest label measures the first REGION-COUNT
+regions and ignores the rest."
   (cffi:with-foreign-object (areas :int region-count)
     (im.ffi::%im-analyze-measure-area (handle labelled) areas region-count)
     (let ((result (make-array region-count)))
@@ -620,3 +919,132 @@ two floats."
       (dotimes (i region-count result)
         (setf (aref result i)
               (cons (cffi:mem-aref cx :double i) (cffi:mem-aref cy :double i)))))))
+
+;;; Shape and intensity measurement -------------------------------------------
+;;;
+;;; Each returns a vector of plists, one per region, indexed 0..REGION-COUNT-1
+;;; for regions 1..REGION-COUNT -- the same indexing REGION-AREAS uses, and the
+;;; same as the C arrays underneath. A plist rather than several parallel
+;;; vectors because these measurements are read together: the four numbers a
+;;; Feret measurement produces are one fact about one region.
+;;;
+;;; The label image is checked here for the reason the denoising filters are:
+;;; every one of these C functions reports a label image of the wrong type by
+;;; returning the counter's abort value, so without the check a byte image
+;;; arrives as "operation cancelled".
+
+(defun %measurements (region-count &rest fields)
+  "A vector of plists built from (KEYWORD POINTER CFFI-TYPE) triples."
+  (let ((result (make-array region-count)))
+    (dotimes (i region-count result)
+      (setf (aref result i)
+            (loop for (key pointer type) in fields
+                  append (list key (cffi:mem-aref pointer type i)))))))
+
+(defun region-bounding-boxes (labelled region-count)
+  "A vector of (:XMIN :XMAX :YMIN :YMAX) plists, one per region.
+
+The box is inclusive, so its width is XMAX-XMIN+1. A label that does not occur
+in the image reports an empty box -- xmin=ymin=0 and xmax=ymax=-1 -- rather
+than a box of negative width."
+  (%check-label-image labelled "region-bounding-boxes" "label image")
+  (if (zerop region-count)
+      #()
+      (cffi:with-foreign-objects ((xmin :int region-count) (xmax :int region-count)
+                                  (ymin :int region-count) (ymax :int region-count))
+        (check-operation "region-bounding-boxes"
+          (not (zerop (im.ffi::%im-analyze-measure-bounding-box
+                       (handle labelled) region-count xmin xmax ymin ymax))))
+        (%measurements region-count
+                       (list :xmin xmin :int) (list :xmax xmax :int)
+                       (list :ymin ymin :int) (list :ymax ymax :int)))))
+
+(defun region-convex-hulls (labelled region-count)
+  "A vector of (:AREA :PERIMETER) plists for each region's convex hull.
+
+Both are geometric: :AREA is the area of the polygon through the pixel
+CENTRES, not a count of pixels, so a solid 8x8 block of 64 pixels has a hull
+of 49. That is why solidity is not computed here even though IM's own header
+gives the formula -- REGION-AREAS counts pixels, and the ratio of the two
+exceeds 1 on anything small, which is a value solidity cannot take. Compare
+like with like before dividing.
+
+A region of fewer than three non-collinear pixels has a degenerate hull and
+reports zero area."
+  (%check-label-image labelled "region-convex-hulls" "label image")
+  (if (zerop region-count)
+      #()
+      (cffi:with-foreign-objects ((area :double region-count)
+                                  (perimeter :double region-count))
+        (check-operation "region-convex-hulls"
+          (not (zerop (im.ffi::%im-analyze-measure-convex-hull
+                       (handle labelled) region-count area perimeter))))
+        (%measurements region-count
+                       (list :area area :double)
+                       (list :perimeter perimeter :double)))))
+
+(defun region-feret-diameters (labelled region-count)
+  "A vector of (:MAX :MAX-ANGLE :MIN :MIN-ANGLE) plists, one per region.
+
+:MAX is the caliper length, the largest distance between any two points of the
+region. :MIN is the smallest width over all directions, which is NOT the
+shortest distance between two hull points -- that is usually the length of one
+short hull edge and says nothing about the shape's width.
+
+Angles are in degrees in [0, 180), anticlockwise from the x axis: a diameter
+has no direction, so the range is half a turn rather than a whole one.
+
+These are not the principal axes. The principal axes are moments of the filled
+region and are pulled by where its mass sits; Feret diameters are extents of
+the outline, decided by the two or three pixels furthest apart."
+  (%check-label-image labelled "region-feret-diameters" "label image")
+  (if (zerop region-count)
+      #()
+      (cffi:with-foreign-objects ((max-feret :double region-count)
+                                  (max-angle :double region-count)
+                                  (min-feret :double region-count)
+                                  (min-angle :double region-count))
+        (check-operation "region-feret-diameters"
+          (not (zerop (im.ffi::%im-analyze-measure-feret
+                       (handle labelled) region-count
+                       max-feret max-angle min-feret min-angle))))
+        (%measurements region-count
+                       (list :max max-feret :double)
+                       (list :max-angle max-angle :double)
+                       (list :min min-feret :double)
+                       (list :min-angle min-angle :double)))))
+
+(defun region-intensities (labelled image region-count &key (plane 0))
+  "A vector of (:MIN :MAX :MEAN :STDDEV :SUM) plists over IMAGE under each region.
+
+Every other measurement here reads the label image alone and so can only
+describe a region's shape. This is the one that says how bright a region is,
+which in most of the fields that count objects is the measurement itself.
+:SUM is the integrated density.
+
+IMAGE is any real image of LABELLED's width and height, and PLANE selects
+which of its planes to measure. :STDDEV divides by n-1, matching STATISTICS; a
+one-pixel region reports 0, and a region with no pixels reports zeros
+throughout."
+  (%check-label-image labelled "region-intensities" "label image")
+  (%check-same-size labelled image "region-intensities")
+  (let ((depth (+ (depth image) (if (has-alpha-p image) 1 0))))
+    (unless (< -1 plane depth)
+      (cl:error 'im-error
+                :detail (format nil "plane ~S out of range for a ~D-plane image"
+                                plane depth))))
+  (if (zerop region-count)
+      #()
+      (cffi:with-foreign-objects ((minimum :double region-count)
+                                  (maximum :double region-count)
+                                  (mean :double region-count)
+                                  (stddev :double region-count)
+                                  (sum :double region-count))
+        (check-operation "region-intensities"
+          (not (zerop (im.ffi::%im-analyze-measure-intensity
+                       (handle labelled) (handle image) plane region-count
+                       minimum maximum mean stddev sum))))
+        (%measurements region-count
+                       (list :min minimum :double) (list :max maximum :double)
+                       (list :mean mean :double) (list :stddev stddev :double)
+                       (list :sum sum :double)))))

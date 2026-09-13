@@ -106,6 +106,13 @@ the pipeline destroys whatever it replaces."
       (usage-error "the custom decorrelation space needs a matrix, which --op cannot carry"))
     key))
 
+(defun keyword-for-diffusion-function (name)
+  (let ((key (intern (string-upcase name) :keyword)))
+    (unless (member key im:*diffusion-functions*)
+      (usage-error "unknown diffusion function ~S; try exponential, quadratic or tukey"
+                   name))
+    key))
+
 (defun keyword-for-data-type (name)
   (let ((key (intern (string-upcase (format nil "DATA-TYPE-~A" name)) :keyword)))
     (unless (ignore-errors (cffi:foreign-enum-value 'im.ffi::data-type key))
@@ -257,6 +264,77 @@ the pipeline destroys whatever it replaces."
                 (parse-number (or (third parts) "0.0") "unsharp threshold"))
     destination))
 
+;;; Edge-preserving denoising and deconvolution -------------------------------
+;;;
+;;; The blurs above -- gaussian, median -- smooth across an edge as readily as
+;;; along it. These three do not, which is why they are worth the extra
+;;; parameters: the one that matters in each is a threshold in the image's own
+;;; sample units, and the right value for it is roughly the noise level.
+
+(define-operation "bilateral" (image argument) "SPATIAL[,RANGE]"
+  "Bilateral filter: Gaussian smoothing that stops at an edge"
+  (let* ((parts (split-commas (require-argument argument "bilateral" "2.0,20")))
+         (destination (im:create-based image)))
+    (im:denoise-bilateral image destination
+                          (parse-number (first parts) "bilateral spatial stddev")
+                          (parse-number (or (second parts) "20") "bilateral range stddev"))
+    destination))
+
+(define-operation "diffusion" (image argument) "ITERATIONS[,KAPPA[,STEP[,FUNC]]]"
+  "Perona-Malik anisotropic diffusion; FUNC is exponential, quadratic or tukey"
+  (let* ((parts (split-commas (require-argument argument "diffusion" "10,30")))
+         (function (if (fourth parts)
+                       (keyword-for-diffusion-function (fourth parts))
+                       :exponential))
+         (destination (im:create-based image)))
+    (im:denoise-anisotropic-diffusion
+     image destination
+     :iterations (floor (parse-number (first parts) "diffusion iterations"))
+     :kappa (parse-number (or (second parts) "30") "diffusion kappa")
+     ;; 0.25 is the stability limit of the explicit scheme, not a taste
+     ;; setting, so the default sits just below it rather than at it.
+     :time-step (parse-number (or (third parts) "0.2") "diffusion time step")
+     :function function)
+    destination))
+
+(define-operation "nlmeans" (image argument) "SEARCH[,PATCH[,STDDEV]]"
+  "Non-local means: recovers repeated texture, and is much the slowest filter here"
+  (let* ((parts (split-commas (require-argument argument "nlmeans" "5,2,10")))
+         (destination (im:create-based image)))
+    (im:denoise-non-local-means
+     image destination
+     :search-radius (floor (parse-number (first parts) "nlmeans search radius"))
+     :patch-radius (floor (parse-number (or (second parts) "2") "nlmeans patch radius"))
+     :filter-stddev (parse-number (or (third parts) "10") "nlmeans filter stddev"))
+    destination))
+
+(define-operation "deconvolve" (image argument) "STDDEV[,ITERATIONS]"
+  "Richardson-Lucy deconvolution of a Gaussian blur of the given standard deviation"
+  ;; The library call takes any point spread function image; this takes only a
+  ;; Gaussian, because a --op argument is a string and a measured PSF is a
+  ;; file. Gaussian covers the usual cases -- defocus, atmosphere, a cheap lens
+  ;; -- and IM:DECONVOLVE-RICHARDSON-LUCY is there for a measured one.
+  (let* ((parts (split-commas (require-argument argument "deconvolve" "1.5,20")))
+         (stddev (parse-number (first parts) "deconvolve stddev"))
+         (iterations (floor (parse-number (or (second parts) "20")
+                                          "deconvolve iterations"))))
+    (unless (plusp stddev)
+      (usage-error "deconvolve stddev must be positive, got ~A" stddev))
+    ;; Both dimensions must be odd, and the kernel has to reach far enough to
+    ;; hold the blur: 3 standard deviations either side of the centre.
+    (let* ((radius (max 1 (ceiling (* 3 stddev))))
+           (size (1+ (* 2 radius)))
+           (psf (im:create size size :color-space-gray :data-type-float))
+           (destination (im:create-based image)))
+      (unwind-protect
+           (progn
+             (im:render-gaussian psf stddev)
+             (verbose "~&  PSF ~Dx~D, ~D iterations~%" size size iterations)
+             (im:deconvolve-richardson-lucy image psf destination
+                                            :iterations iterations))
+        (im:destroy psf))
+      destination)))
+
 ;;; Thresholding and morphology -----------------------------------------------
 
 (define-operation "threshold" (image argument) "LEVEL | otsu"
@@ -291,6 +369,30 @@ the pipeline destroys whatever it replaces."
   (define-morphology "dilate" im:morph-dilate "Morphological dilation")
   (define-morphology "open" im:morph-open "Erode then dilate")
   (define-morphology "close" im:morph-close "Dilate then erode"))
+
+;;; Segmentation --------------------------------------------------------------
+
+(define-operation "watershed" (image argument) "[CONNECTIVITY][,lines]"
+  "Split touching objects in a binary image into a labelled ushort image"
+  ;; Deliberately does not binarise first, unlike `threshold'. Which way an
+  ;; image is binarised decides what the objects are, and a watershed of the
+  ;; wrong binarisation is not a worse answer, it is an answer to a different
+  ;; question. Chain it: --op threshold=otsu --op watershed.
+  (unless (eq :color-space-binary (im:color-space image))
+    (usage-error "watershed needs a binary image; put `--op threshold=otsu' before it"))
+  (let* ((parts (when argument (split-commas argument)))
+         (connectivity (if (and (first parts) (plusp (length (first parts))))
+                           (floor (parse-number (first parts) "watershed connectivity"))
+                           8))
+         (mark-lines (member "lines" (rest parts) :test #'string-equal)))
+    (unless (member connectivity '(4 8))
+      (usage-error "watershed connectivity must be 4 or 8, got ~D" connectivity))
+    (multiple-value-bind (labelled count)
+        (im:watershed-segment image nil
+                              :connectivity connectivity
+                              :mark-lines (and mark-lines t))
+      (verbose "~&  ~D object~:P~%" count)
+      labelled)))
 
 ;;; Frequency domain ----------------------------------------------------------
 
@@ -342,26 +444,6 @@ the pipeline destroys whatever it replaces."
     (unless operation
       (usage-error "unknown operation ~S. Try `im process --list-ops'." name))
     (values operation argument)))
-
-(defun call-with-progress (thunk)
-  "Run THUNK with an IM progress callback attached, if --verbose is on.
-
-Doubles as the only exercise the cancellation path gets outside the test
-suite: the callback returns true throughout, but the machinery that would turn
-a false return into IM:OPERATION-ABORTED is the same."
-  (if *verbose*
-      (let ((last -1))
-        (im:with-progress ((lambda (id text progress)
-                             (declare (ignore id))
-                             (let ((decile (floor progress 100)))
-                               (when (and (<= 0 progress 1000) (/= decile last))
-                                 (setf last decile)
-                                 (format *error-output* "~&  ~3D%~@[ ~A~]~%"
-                                         (floor progress 10) text)
-                                 (finish-output *error-output*)))
-                             t))
-          (funcall thunk)))
-      (funcall thunk)))
 
 (defun run-pipeline (image specs)
   "Apply SPECS to IMAGE in order, returning the final image.

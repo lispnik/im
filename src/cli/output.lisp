@@ -17,6 +17,30 @@ stderr rather than stdout so that `im info --json x.png | jq` keeps working."
     (apply #'format *error-output* control arguments)
     (finish-output *error-output*)))
 
+(defun call-with-progress (thunk)
+  "Run THUNK with an IM progress callback attached, if --verbose is on.
+
+Here rather than beside the pipeline that first used it: --verbose is a
+global option, so every subcommand that does enough work to be worth watching
+should report the same way, and two of them now do.
+
+Doubles as the only exercise the cancellation path gets outside the test
+suite: the callback returns true throughout, but the machinery that would turn
+a false return into IM:OPERATION-ABORTED is the same."
+  (if *verbose*
+      (let ((last -1))
+        (im:with-progress ((lambda (id text progress)
+                             (declare (ignore id))
+                             (let ((decile (floor progress 100)))
+                               (when (and (<= 0 progress 1000) (/= decile last))
+                                 (setf last decile)
+                                 (format *error-output* "~&  ~3D%~@[ ~A~]~%"
+                                         (floor progress 10) text)
+                                 (finish-output *error-output*)))
+                             t))
+          (funcall thunk)))
+      (funcall thunk)))
+
 ;;; JSON ----------------------------------------------------------------------
 
 (defun json-key (keyword)

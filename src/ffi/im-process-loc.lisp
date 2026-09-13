@@ -6,6 +6,12 @@
 
 (in-package #:im.ffi)
 
+;;; imDiffusionFunc
+(cffi:defcenum diffusion-func
+  :diffusion-func-exponential
+  :diffusion-func-quadratic
+  :diffusion-func-tukey)
+
 (cffi:defcfun ("imProcessReduce" %im-process-reduce) :int
   "Only reduze the image size using the given decimation order. Supported
 decimation orders: \\li 0 - zero order (mean) [default in Lua for MAP and
@@ -524,3 +530,82 @@ absolute size of the edge. Returns zero if the counter aborted."
   (dst-image im-image)
   (amount :double)
   (threshold :double))
+
+(cffi:defcfun ("imProcessBilateralFilter" %im-process-bilateral-filter) :int
+  "Bilateral filter. A Gaussian smoothing in which each neighbour is
+additionally weighted by how close its value is to the centre pixel's, so
+the filter does not average across a step. Source and target must be of
+the same size and type, and can be done in-place. Supports all data types
+except complex. spatial_stddev is in pixels and sets the neighbourhood,
+which is 2 standard deviations. range_stddev is in the image's own sample
+units: set it near the noise level, because a value much above it flattens
+texture into patches. Both must be greater than zero. Cost is proportional
+to spatial_stddev squared. Returns zero if the counter aborted."
+  (src-image im-image)
+  (dst-image im-image)
+  (spatial-stddev :double)
+  (range-stddev :double))
+
+(cffi:defcfun ("imProcessAnisotropicDiffusion" %im-process-anisotropic-diffusion) :int
+  "Anisotropic diffusion, the Perona-Malik scheme. Runs a diffusion whose
+conductance falls where the gradient is large, so edges survive and even
+sharpen while flat regions smooth. Source and target must be of the same
+size and type, and can be done in-place. Supports all data types except
+complex. time_step must be in (0, 0.25]: the explicit scheme is unstable
+above a quarter with four neighbours, and diverges into a checkerboard
+rather than reporting anything. kappa is the gradient threshold in the
+image's own sample units and must be greater than zero; func is an
+imDiffusionFunc. Computed in double, so an IM_BYTE image does not quantise
+between iterations. Returns zero if the counter aborted."
+  (src-image im-image)
+  (dst-image im-image)
+  (time-step :double)
+  (kappa :double)
+  (iterations :int)
+  (func :int))
+
+(cffi:defcfun ("imProcessNonLocalMeans" %im-process-non-local-means) :int
+  "Non-local means. Averages each pixel with those whose NEIGHBOURHOODS match
+it, rather than those that are near it, so repeated fine structure is
+recovered instead of smoothed away. Source and target must be of the same
+size and type, and can be done in-place. Supports all data types except
+complex. search_radius bounds how far to look for a matching patch,
+patch_radius sets the patch compared, and filter_stddev is the weight
+decay in the image's own sample units -- start at the noise standard
+deviation. All three must be greater than zero. Cost is proportional to
+search_radius squared times patch_radius squared, which makes this one to
+two orders of magnitude slower than the other two filters here. Radii of 5
+and 2 are a reasonable starting point. Returns zero if the counter
+aborted."
+  (src-image im-image)
+  (dst-image im-image)
+  (search-radius :int)
+  (patch-radius :int)
+  (filter-stddev :double))
+
+(cffi:defcfun ("imProcessRichardsonLucy" %im-process-richardson-lucy) :int
+  "Richardson-Lucy deconvolution. The maximum-likelihood restoration under
+Poisson noise, which is what a photon-counting detector has, and the
+standard deconvolution for microscopy and astronomy. Source and target
+must be of the same size and type, and can be done in-place. Supports all
+data types except complex. psf_image is the point spread function:
+IM_GRAY, any real data type, and both dimensions ODD, because an
+even-sided kernel has no centre pixel and the result would come out
+shifted half a pixel with nothing to say so. It is normalised to sum 1
+internally, so imProcessRenderGaussian can be used to build one directly.
+Negative samples in it are clamped to zero. The iteration preserves total
+flux, so the result stays photometrically meaningful. It does NOT converge
+to something pleasant: past a few tens of iterations it starts fitting the
+noise, which shows as ringing around bright features that grows with every
+further iteration. The iteration count is the only regularisation, and
+there is no general stopping rule -- 10 to 50 is the usual range. Negative
+input samples are treated as zero: the update is a ratio, and a negative
+value makes the likelihood meaningless. Computed in the spatial domain
+with replicated borders rather than through the FFT, so there is no
+wrap-around contamination between opposite edges, and no dependence on
+whether libim_fftw3 happens to be loaded. Cost is proportional to the
+iteration count times the PSF area. Returns zero if the counter aborted."
+  (src-image im-image)
+  (psf-image im-image)
+  (dst-image im-image)
+  (iterations :int))

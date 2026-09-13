@@ -256,3 +256,81 @@ zero if the counter aborted."
   (src-image im-image)
   (dst-image im-image)
   (connect :int))
+
+(cffi:defcfun ("imAnalyzeMeasureBoundingBox" %im-analyze-measure-bounding-box) :int
+  "Measure the bounding box of all regions. Source image is IM_GRAY/IM_USHORT
+type (the result of imAnalyzeFindRegions). xmin, xmax, ymin and ymax have
+size the number of regions; any of them may be NULL and will then not be
+calculated. The box is inclusive, so its width is xmax-xmin+1. A label
+that does not occur in the image reports xmin=ymin=0 and xmax=ymax=-1, an
+empty box, rather than a box of negative width. Not using OpenMP when
+enabled. Returns zero if the counter aborted. The returned tables are zero
+indexed."
+  (image im-image)
+  (region-count :int)
+  (xmin :pointer)
+  (xmax :pointer)
+  (ymin :pointer)
+  (ymax :pointer))
+
+(cffi:defcfun ("imAnalyzeMeasureConvexHull" %im-analyze-measure-convex-hull) :int
+  "Measure the area and perimeter of the convex hull of all regions. Source
+image is IM_GRAY/IM_USHORT type (the result of imAnalyzeFindRegions).
+hull_area and hull_perim have size the number of regions; either may be
+NULL and will then not be calculated. Solidity, the usual measure of how
+concave a region is, is the region's own area from imAnalyzeMeasureArea
+divided by hull_area. Convexity is hull_perim divided by the perimeter
+from imAnalyzeMeasurePerimeter. Neither is computed here because both are
+one division on numbers the caller already has. A region of fewer than
+three non-collinear pixels has a degenerate hull and reports zero area.
+Not using OpenMP when enabled. Returns zero if the counter aborted. The
+returned tables are zero indexed."
+  (image im-image)
+  (region-count :int)
+  (hull-area :pointer)
+  (hull-perim :pointer))
+
+(cffi:defcfun ("imAnalyzeMeasureFeret" %im-analyze-measure-feret) :int
+  "Measure the Feret diameters of all regions. Source image is
+IM_GRAY/IM_USHORT type (the result of imAnalyzeFindRegions). All four
+arrays have size the number of regions and any may be NULL. max_feret is
+the largest distance between any two points of the region -- its caliper
+length. min_feret is the smallest width over all directions, which is NOT
+the shortest distance between two hull points: that is usually the length
+of one short hull edge and says nothing about the shape's width. The
+angles are in degrees in [0,180), measured anticlockwise from the x axis.
+A diameter has no direction, so the range is half a turn, not a whole one.
+These differ from imAnalyzeMeasurePrincipalAxis: the principal axes are
+moments of the filled region and are pulled by where the mass sits, while
+Feret diameters are extents of the outline and are decided by the two or
+three pixels furthest apart. Not using OpenMP when enabled. Returns zero
+if the counter aborted. The returned tables are zero indexed."
+  (image im-image)
+  (region-count :int)
+  (max-feret :pointer)
+  (max-angle :pointer)
+  (min-feret :pointer)
+  (min-angle :pointer))
+
+(cffi:defcfun ("imAnalyzeMeasureIntensity" %im-analyze-measure-intensity) :int
+  "Measure the statistics of a second image under each region. label_image is
+IM_GRAY/IM_USHORT type (the result of imAnalyzeFindRegions); image is any
+real data type of the same width and height, and plane selects which of
+its planes to measure. min_value, max_value, mean, stddev and sum_value
+have size the number of regions and any may be NULL. stddev divides by
+n-1, matching imCalcImageStatistics. A region of one pixel reports a
+stddev of 0, and a region with no pixels reports zeros throughout. Every
+other measurement in this header reads the label image alone and so can
+only describe a region's shape. This is the one that answers how bright it
+is -- the measurement itself, in most of the fields that count objects.
+sum_value is the integrated density. Not using OpenMP when enabled.
+Returns zero if the counter aborted. The returned tables are zero indexed."
+  (label-image im-image)
+  (image im-image)
+  (plane :int)
+  (region-count :int)
+  (min-value :pointer)
+  (max-value :pointer)
+  (mean :pointer)
+  (stddev :pointer)
+  (sum-value :pointer))

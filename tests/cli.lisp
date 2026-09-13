@@ -166,6 +166,191 @@ only kind anyone points this at -- looks exactly like nothing happened."
         (is (not (zerop code)))
         (is (search "needs a matrix" err))))))
 
+(test denoise-ops-run-and-validate-their-arguments
+  "The three edge-preserving filters and the deconvolution, end to end."
+  (with-cli
+    (let ((output (namestring (tmp-file "cli-denoise.png"))))
+      (dolist (spec '("bilateral=2,25"
+                      "diffusion=8,25,0.2,tukey"
+                      "nlmeans=3,1,20"
+                      "deconvolve=1.5,15"))
+        (multiple-value-bind (out err code)
+            (run-cli "process" (namestring (image-file "lena.jpg")) output
+                     "--op" spec)
+          (declare (ignore out))
+          (is (zerop code) "--op ~A failed: ~A" spec err)
+          (is (probe-file output))))
+      ;; 0.25 is the stability limit of the explicit scheme, not a taste
+      ;; setting, so exceeding it has to be reported rather than obeyed.
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "lena.jpg")) output
+                   "--op" "diffusion=5,25,0.5")
+        (declare (ignore out))
+        (is (not (zerop code)))
+        (is (search "0.25" err)))
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "lena.jpg")) output
+                   "--op" "diffusion=5,25,0.2,nope")
+        (declare (ignore out))
+        (is (not (zerop code)))
+        (is (search "diffusion function" err))))))
+
+(test watershed-op-needs-a-binary-image-and-says-so
+  "`--op watershed' does not binarise for you.
+
+Which binarisation is used decides what the objects are, so a watershed of a
+threshold the user did not choose is not a worse answer, it is an answer to a
+different question. The error has to name the fix, since the fix is another
+--op in front."
+  (with-cli
+    (let ((output (namestring (tmp-file "cli-watershed.png"))))
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "rice.png")) output
+                   "--op" "watershed")
+        (declare (ignore out))
+        (is (not (zerop code)))
+        (is (search "threshold=otsu" err)
+            "the message must name the operation to put in front"))
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "rice.png")) output
+                   "--op" "threshold=otsu" "--op" "watershed=8")
+        (declare (ignore err))
+        (is (zerop code))
+        (is (search "data-type-ushort" out) "the result is a label image")
+        (im:with-image (result (im:load output))
+          (is (eq :data-type-ushort (im:data-type result))))))))
+
+(test analyze-reports-the-measurements-it-was-asked-for
+  (with-cli
+    (multiple-value-bind (out err code)
+        (run-cli "analyze" "--measure" "all" "--limit" "1" "--json"
+                 (namestring (image-file "rice.png")))
+      (declare (ignore err))
+      (is (zerop code))
+      (let* ((report (shasht:read-json out))
+             (region (aref (gethash "regions" report) 0)))
+        (is (plusp (gethash "region-count" report)))
+        (dolist (field '("area" "x" "y" "xmin" "xmax" "ymin" "ymax"
+                         "hull-area" "hull-perimeter"
+                         "max-feret" "min-feret"
+                         "intensity-mean" "intensity-sum"))
+          (is-true (nth-value 1 (gethash field region))
+                   "--measure all must report ~A" field))))
+    ;; The default is what it always was, so a script reading this output does
+    ;; not have to change when the library grows.
+    (multiple-value-bind (out err code)
+        (run-cli "analyze" "--limit" "1" "--json"
+                 (namestring (image-file "rice.png")))
+      (declare (ignore err))
+      (is (zerop code))
+      (let ((region (aref (gethash "regions" (shasht:read-json out)) 0)))
+        (is-true (nth-value 1 (gethash "area" region)))
+        (is-false (nth-value 1 (gethash "max-feret" region))
+                  "the default must not have grown new fields")))
+    (multiple-value-bind (out err code)
+        (run-cli "analyze" "--measure" "nope" (namestring (image-file "rice.png")))
+      (declare (ignore out))
+      (is (not (zerop code)))
+      (is (search "unknown measurement" err)))))
+
+(test analyze-limit-bounds-the-measurement-without-changing-it
+  "--limit measures only what it reports, and reports the same numbers.
+
+That equivalence is the whole licence for measuring a prefix: a region's
+measurements depend only on its own pixels, and both paths order regions by
+label, so the first N are the same N. If they ever differ the saving is not a
+saving, it is a different answer -- and the numbers would still look
+plausible, which is why this compares them field by field rather than
+checking that some regions came back.
+
+Safe only against tecgraf-im v2.2.1 and later. Before it a region count below
+the number of labels present wrote past the end of the measurement arrays, so
+the default --limit 20 would have corrupted the heap on any image with more
+regions than that."
+  (with-cli
+    (flet ((analyze (&rest extra)
+             (shasht:read-json
+              (apply #'run-cli "analyze" "--measure" "all" "--json"
+                     (namestring (image-file "rice.png")) extra))))
+      (let* ((limited (analyze "--limit" "3"))
+             (whole (analyze "--limit" "0"))
+             (few (gethash "regions" limited))
+             (all (gethash "regions" whole)))
+        ;; The reported total is the image's, not the limit's.
+        (is (= (gethash "region-count" limited) (gethash "region-count" whole)))
+        (is (> (gethash "region-count" limited) 3)
+            "the fixture must carry more regions than the limit, or this proves nothing")
+        (is (= 3 (length few)))
+        (is (> (length all) 3))
+        (loop for i below 3
+              do (is (equalp (aref few i) (aref all i))
+                     "region ~D differs when only the first three are measured" i))))))
+
+(test analyze-verbose-reports-progress
+  "`im analyze --verbose' attaches a progress callback, like `im process'.
+
+It did not until this was fixed: --verbose is a global option, but analyze
+printed only its own notes and installed nothing, so the slowest thing the
+tool does ran silently. Asserting on the counter's own titles rather than on a
+percentage -- \"Analyzing...\" is what the region measurements call
+imCounterTotal with, so it can only appear if the callback reached them."
+  (with-cli
+    (multiple-value-bind (out err code)
+        (run-cli "analyze" "--verbose" "--measure" "all" "--limit" "1"
+                 (namestring (image-file "rice.png")))
+      (is (zerop code) "im analyze --verbose failed: ~A" err)
+      (is (search "region count" out))
+      (is (search "%" err) "no progress was reported at all")
+      (is (search "Analyzing..." err)
+          "the measurements reported no progress, so the callback never reached them"))))
+
+(test analyze-watershed-finds-more-objects-than-labelling-does
+  "Touching rice grains are one connected region each and several objects.
+
+The count must go UP, and the report must say which method produced it --
+the two numbers are not comparable and nothing else in the output would
+distinguish them."
+  (with-cli
+    (flet ((count-regions (&rest extra)
+             (let ((out (apply #'run-cli "analyze" "--limit" "0" "--json"
+                               (namestring (image-file "rice.png")) extra)))
+               (shasht:read-json out))))
+      (let ((labelled (count-regions))
+            (split (count-regions "--watershed")))
+        (is (string= "connected-components" (gethash "method" labelled)))
+        (is (string= "watershed" (gethash "method" split)))
+        (is (> (gethash "region-count" split)
+               (gethash "region-count" labelled))
+            "a watershed must separate at least one touching pair")))))
+
+(test a-verbose-pipeline-reaching-find-regions-reports-and-survives
+  "`im process --verbose' over a watershed, which used to kill the process.
+
+--verbose is the only thing in this tool that installs an IM progress
+callback, and only `im process' installs one -- `im analyze --verbose' prints
+its own notes and attaches nothing, so it was never the reproducer. Before
+tecgraf-im v2.2.1 a callback was fatal: imAnalyzeFindRegions, which
+imProcessWatershedSegment calls for its markers, ended a counter it had begun
+with the non-OpenMP call and freed a lock that was never allocated.
+
+The progress lines on stderr are the half worth asserting, and they have to be
+the RIGHT ones: a pipeline that merely exits 0 would pass with the callback
+quietly detached around the watershed, which is how this binding used to avoid
+the crash -- and the `threshold' step ahead of it reports progress either way,
+so looking for a percentage proves nothing. \"Analyzing...\" is
+imAnalyzeFindRegions' own counter title. Nothing else in this pipeline emits
+it, and it cannot be emitted at all unless the callback reached the function
+that used to die."
+  (with-cli
+    (let ((output (namestring (tmp-file "cli-verbose-watershed.png"))))
+      (multiple-value-bind (out err code)
+          (run-cli "process" (namestring (image-file "rice.png")) output
+                   "--op" "threshold=otsu" "--op" "watershed" "--verbose")
+        (declare (ignore out))
+        (is (zerop code) "im process --verbose crashed: ~A" err)
+        (is (search "Analyzing..." err)
+            "the region labeller inside the watershed reported no progress")))))
+
 (test unknown-operation-is-reported-not-ignored
   (with-cli
     (multiple-value-bind (out err code)

@@ -39,23 +39,19 @@ jobs:
           - name: Linux amd64
             os: ubuntu-24.04
             asset: im-linux-amd64
-            im-artifact: im-libs-ubuntu-24.04
-            im-workflow: ci-linux.yml
+            im-asset: linux-amd64
           - name: Linux arm64
             os: ubuntu-24.04-arm
             asset: im-linux-arm64
-            im-artifact: im-libs-ubuntu-24.04-arm
-            im-workflow: ci-linux.yml
+            im-asset: linux-arm64
           - name: macOS arm64
             os: macos-15
             asset: im-macos-arm64
-            im-artifact: im-libs-macos-15
-            im-workflow: ci-macos.yml
+            im-asset: macos-arm64
           - name: Windows x64
             os: windows-2022
             asset: im-windows-x64.zip
-            im-artifact: im-libs-windows-2022
-            im-workflow: ci-windows.yml
+            im-asset: windows-x64
 
     defaults:
       run:
@@ -65,6 +61,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Read the pinned tecgraf-im version
+        run: echo "IM_VERSION=$(tr -d '[:space:]' < .github/tecgraf-im-version)" >> "$GITHUB_ENV"
 
       # A tag that disagrees with version.txt would ship a binary whose
       # --version contradicts the release it is attached to. Cheaper to catch
@@ -171,17 +170,49 @@ jobs:
                         (format *error-output* "~&::error::dependency does not resolve: ~A~%" e)
                         (uiop:quit 1)))'
 
-      - name: Download IM libraries
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          repo: lispnik/tecgraf-im
-          workflow: ${{ matrix.im-workflow }}
-          branch: master
-          name: ${{ matrix.im-artifact }}
-          path: im-libs/
+      # From the pinned RELEASE, not from upstream's CI artifacts.
+      #
+      # This used to be action-download-artifact against ci-*.yml on master,
+      # which works right up until it does not: those artifacts carry
+      # retention-days: 14, so a release cut more than a fortnight after the
+      # last push to tecgraf-im would fail for no reason connected to this
+      # repository. lispnik/cd hit exactly that and had to disable IM support
+      # over it, which is why upstream publishes release archives at all.
+      # ci.yml was moved onto them; this workflow was not, until now.
+      #
+      # It also makes the binaries honest: a release built from master-tip
+      # artifacts is built against whatever upstream had that morning, not
+      # against the version README.md tells users they need.
+      #
+      # The release archive is an installed tree -- lib/ and include/ -- while
+      # the steps below expect the libraries flat in im-libs/, which is the
+      # shape the CI artifact had. Flatten rather than teach them about both.
+      - name: Download IM ${{ env.IM_VERSION }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            Windows) archive="tecgraf-im-${IM_VERSION}-${{ matrix.im-asset }}.zip" ;;
+            *)       archive="tecgraf-im-${IM_VERSION}-${{ matrix.im-asset }}.tar.gz" ;;
+          esac
+          mkdir -p im-release im-libs
+          gh release download "$IM_VERSION" --repo lispnik/tecgraf-im \
+            --pattern "$archive" --dir . --clobber
+          case "$archive" in
+            *.zip)    unzip -q -o "$archive" -d im-release ;;
+            *.tar.gz) tar -xzf "$archive" -C im-release ;;
+          esac
+          # Windows keeps the DLLs in bin/ and the import libraries in lib/;
+          # everything else puts the shared objects in lib/.
+          for d in im-release/lib im-release/bin; do
+            [ -d "$d" ] && find "$d" -maxdepth 1 -type f -exec cp {} im-libs/ \;
+          done
+          test -n "$(find im-libs -name 'libim.*' -o -name 'im.dll' | head -1)" \
+            || { echo "::error::no libim in $archive"; ls -R im-release | head -30; exit 1; }
+          ls -la im-libs/
 
-      - name: Drop the non-libraries from the artifact
+      - name: Drop the non-libraries
         run: |
           # Keep shared libraries and nothing else, by file type. See the long
           # note on the same step in ci.yml: a name-based allowlist deleted the
@@ -189,15 +220,23 @@ jobs:
           # open as upstream adds programs. The listing matters here -- this is
           # the job that produced the opaque "Error opening shared object", and
           # its log said nothing about what had survived the prune.
+          #
+          # Lighter work than it was, now that the source is an installed tree
+          # rather than upstream's build/lib: `cmake --install' does not copy
+          # the test binary, the demos or the .app bundle. Kept anyway, since
+          # this directory goes on the library search path and what upstream
+          # chooses to install is not this workflow's decision.
           find im-libs -mindepth 1 -maxdepth 1 \
             \( ! -name '*.so' ! -name '*.so.*' ! -name '*.dylib' ! -name '*.dll' \
                -o -name 'imlua*' \) \
             -exec rm -rf {} + || true
           echo "kept:"; ls -la im-libs/
 
-      # Upstream bakes absolute install names pointing at its own build
-      # directory; downloaded here those paths do not exist, so the
-      # inter-library references dangle. See the same step in ci.yml.
+      # Upstream bakes absolute install names pointing at the build directory
+      # its release was produced in -- CMAKE_BUILD_WITH_INSTALL_NAME_DIR is on
+      # deliberately, for consumers with no rpath of their own -- and on this
+      # runner those paths do not exist, so the inter-library references
+      # dangle. See the same step in ci.yml.
       - name: Repair macOS install names
         if: runner.os == 'macOS'
         run: |

@@ -6,12 +6,17 @@ line tool that drives them.
 
 This project is unaffiliated with Tecgraf.
 
-Requires **tecgraf-im v2.1.1 or later**: v0.7.0 binds the decorrelation stretch,
-which earlier releases do not export. (v2.1.0 nominally has it but its release
-carries only the macOS and Windows builds, so v2.1.1 is the first usable one.)
+Requires **tecgraf-im v2.2.1 or later**: v0.8.0 binds the watershed, the
+edge-preserving denoising filters, Richardson-Lucy deconvolution and the shape
+and intensity measurements, none of which earlier releases export. v2.2.1
+rather than v2.2.0 because two bugs found while writing those bindings are
+fixed in it, and working around them here cost more than the operations were
+worth — a progress callback killed the process outright in the OpenMP build,
+and asking for fewer regions than an image carries corrupted the heap. v0.7.x
+needs v2.1.1, the first usable release carrying the decorrelation stretch.
 
 Built against [lispnik/tecgraf-im](https://github.com/lispnik/tecgraf-im), a
-CMake fork of IM 3.15. The bindings cover **456 C functions** — every function
+CMake fork of IM 3.15. The bindings cover **468 C functions** — every function
 exported by `libim`, `libim_process`, `libim_capture`, `libim_fftw3` and the
 format add-ons, apart from a documented list of driver internals.
 
@@ -81,22 +86,74 @@ Operations in `im process` are given as repeated `--op` arguments and applied
 ```sh
 im process in.jpg out.png \
     --op resize=50% --op colorspace=gray --op gaussian=1.5 --op sobel
+```
 
 `--op dstretch=SPACE[,SCALE]` is the decorrelation stretch — the enhancement
 DStretch is built on, which pulls apart colours that lie along a single axis so
 faint differences become visible. `lds` is the general-purpose space and the
 default scale is 6:
 
-    im process faded.jpg enhanced.png --op dstretch=lds
+```sh
+im process faded.jpg enhanced.png --op dstretch=lds
+```
 
 `lre`, `yre` and `crgb` favour reds, `yye` and `lye` yellows, `ybk` and `lbk`
 blacks and blues. `im:decorrelation-fit` and `im:decorrelation-apply` expose the
 same thing as a transform that can be fitted to one image and applied to a
 whole series, which is how you get consistent colour across a set.
+
+Three filters smooth an image **without blurring across its edges**, which
+`gaussian` and `median` cannot do. The parameter that matters in each is a
+threshold in the image's own sample units, and the right value for it is
+roughly the noise level:
+
+```sh
+im process noisy.png clean.png --op bilateral=3,25      # spatial, range
+im process noisy.png clean.png --op diffusion=15,25     # iterations, kappa
+im process noisy.png clean.png --op nlmeans=5,2,20      # search, patch, stddev
 ```
 
-`im process --list-ops` lists all twenty. Sizes accept `WxH`, `800x` or `x600`
-to preserve the aspect ratio, and `50%`.
+`nlmeans` recovers repeated fine structure the other two smooth away, and is
+one to two orders of magnitude slower for it. `diffusion` takes an optional
+time step and conductance function — `exponential`, `quadratic` or `tukey`.
+
+`--op deconvolve=STDDEV[,ITERATIONS]` is Richardson-Lucy deconvolution of a
+Gaussian blur. The iteration count is the only regularisation there is: past a
+few tens of steps it starts fitting the noise, which shows as ringing that
+grows with every further one.
+
+```sh
+im process blurred.png sharp.png --op deconvolve=1.5,20
+```
+
+`im:deconvolve-richardson-lucy` takes any point spread function image, for a
+measured PSF rather than a Gaussian.
+
+`--op watershed[=CONNECTIVITY][,lines]` splits touching objects that connected
+component labelling has to call one region, and writes a label image. It does
+not binarise for you — which binarisation is used decides what the objects are
+— so put a threshold in front of it:
+
+```sh
+im process cells.png labels.png --op threshold=otsu --op watershed=8
+```
+
+`im process --list-ops` lists all twenty-six. Sizes accept `WxH`, `800x` or
+`x600` to preserve the aspect ratio, and `50%`.
+
+`im analyze` labels regions and measures them. `--measure` picks what to
+report — `area`, `centroid`, `bbox`, `hull`, `feret`, `intensity`, or `all`;
+the default is area and centroid. `--watershed` separates touching objects
+first, the same split `--op watershed` does:
+
+```sh
+im analyze cells.png --watershed --measure all --json | jq '.regions[0]'
+```
+
+`feret` is the caliper diameters — the longest distance across a region and its
+narrowest width, with angles. `intensity` is the only measurement that reads
+the image rather than the labels, and so the only one that says how *bright* a
+region is rather than what shape it is.
 
 Exit codes are 0 for success, 1 for an IM error, 2 for a usage error and 130
 for an interrupt. Diagnostics go to stderr, so piping stdout to `jq` is safe.

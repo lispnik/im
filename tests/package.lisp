@@ -79,3 +79,45 @@ that worked. Deterministic, so a fit is reproducible between two calls."
 (defun set-pixels (image plane value)
   (dotimes (i (im:pixel-count image))
     (setf (cffi:mem-aref (im:plane-pointer image plane) :unsigned-char i) value)))
+
+(defun binary-dumbbell (&key (width 64) (height 40) (radius 11) (overlap 4))
+  "A binary image of two overlapping discs -- one connected region, two objects.
+
+The shape that separates IM:FIND-REGIONS from IM:WATERSHED-SEGMENT. Connected
+component labelling has to call this one region, because it is one; only a
+watershed of the distance transform splits it at the neck. OVERLAP is how far
+the two discs are pushed into each other, in pixels."
+  (let* ((image (im:create width height :color-space-binary :data-type-byte))
+         (plane (im:plane-pointer image 0))
+         (cy (floor height 2))
+         (offset (- radius (floor overlap 2)))
+         (cx1 (- (floor width 2) offset))
+         (cx2 (+ (floor width 2) offset)))
+    (dotimes (i (* width height))
+      (setf (cffi:mem-aref plane :unsigned-char i) 0))
+    (loop for y below height
+          do (loop for x below width
+                   when (or (<= (+ (expt (- x cx1) 2) (expt (- y cy) 2))
+                                (* radius radius))
+                            (<= (+ (expt (- x cx2) 2) (expt (- y cy) 2))
+                                (* radius radius)))
+                     do (setf (cffi:mem-aref plane :unsigned-char
+                                             (+ (* y width) x))
+                              1)))
+    image))
+
+(defun noisy-step (&key (width 64) (height 64) (low 60) (high 190) (noise 20))
+  "A gray byte image of two flat halves with a hard vertical edge, plus noise.
+
+What an edge-preserving filter is for: a denoising filter that works has to
+reduce the variation WITHIN each half without softening the step BETWEEN them,
+and those two are separable only on an image that has both. Deterministic."
+  (let ((image (im:create width height :color-space-gray :data-type-byte))
+        (state 20260912))
+    (flet ((next ()
+             (setf state (ldb (byte 32 0) (+ (* state 1103515245) 12345)))
+             (- (mod (ldb (byte 15 16) state) (1+ (* 2 noise))) noise)))
+      (dotimes (i (* width height) image)
+        (let ((level (if (< (mod i width) (floor width 2)) low high)))
+          (setf (cffi:mem-aref (im:plane-pointer image 0) :unsigned-char i)
+                (max 0 (min 255 (+ level (next))))))))))

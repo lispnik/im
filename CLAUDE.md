@@ -154,6 +154,34 @@ order decide.
 - **`find-symbol` signals when its package designator names nothing**, unlike
   `find-package`. Probing for an optional package (`swank`, `slynk`) must
   lead with `find-package`, or the probe is the crash.
+- **The minimum tecgraf-im is v2.2.1, and it is a floor rather than a
+  preference.** Two bugs in v2.2.0 were reachable from ordinary use of this
+  binding, and both are fixed there. `imAnalyzeFindRegions` and
+  `imProcessCanny` opened a counter with `imCounterBegin` and closed it with
+  `imProcessCounterEnd`, which in the OpenMP build freed an `omp_lock_t` the
+  plain Begin never allocated — so any operation with a progress callback
+  attached died at address 0. `im process --verbose` is the reachable case,
+  since that is the only subcommand that installs one; `im analyze` never has,
+  so its `--verbose` was never affected. And `imAnalyzeMeasureArea` and five
+  others indexed their
+  output arrays by label with no range check, so a `region_count` below the
+  number of labels wrote past the end. Both were worked around here — the
+  callback detached around two calls, a scan for the highest label before two
+  others — and both workarounds are gone. Do not reinstate them for an older
+  library: the first cost progress reporting *and* cancellation on the two
+  operations that had it, and neither could tell a fixed library from a broken
+  one, because tecgraf-im does not bump `IM_VERSION_NUMBER`.
+- **A convex hull's area is not in the same units as a region's area.** IM
+  measures the hull as a polygon through pixel *centres* and the region as a
+  count of pixels, so their ratio — solidity, which is the reason to ask for a
+  hull — exceeds 1 on anything small: a solid 8x8 block of 64 pixels has a
+  hull of 49. `im analyze --measure hull` reports both figures and derives
+  nothing from them, though the upstream header suggests the division.
+- **The regenerated `src/ffi/` drops whatever the generating machine's IM does
+  not export.** `imFormatRegisterJP2` disappears on a Homebrew install, because
+  `IM_BUILD_JP2` now defaults to OFF upstream — but the binding is guarded, the
+  add-on is optional at load time, and a build that does have JP2 wants it. Put
+  it back by hand after regenerating.
 - **SLY's `eval-in-emacs` must be sent with `nowait`.** Emacs checks
   `sly-enable-evaluate-in-emacs` in the event dispatcher, outside the handler
   that turns an error into a return value, so the blocking form waits forever
@@ -161,7 +189,7 @@ order decide.
 
 ## Tests
 
-`tests/`, one file per area, 224 checks. Beyond the obvious coverage they
+`tests/`, one file per area, 461 checks. Beyond the obvious coverage they
 assert the things that previously went untested: the condition hierarchy, the
 restart protocol, finalizer and double-destroy behaviour, that every binding
 resolves against the loaded libraries, and — by running `bin/im` as a
