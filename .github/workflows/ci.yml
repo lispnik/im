@@ -111,6 +111,32 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then runtime="$(cygpath -m "$runtime")"; fi
           echo "OCICL_RUNTIME=$runtime" >> "$GITHUB_ENV"
 
+      # Cache the dependency tree, keyed on the file that pins it.
+      #
+      # ocicl.csv names every system by content digest, so a hit is exactly the
+      # tree that file asks for and `ocicl install' below becomes a silent
+      # no-op that touches no network. That is the point: ghcr.io fails per
+      # system, per runner, at random -- see the retry loop in the next step --
+      # and it has cost two releases. v0.7.1 went out carrying one binary of
+      # four, and v0.8.0 sat at three of four while its macOS job lost the same
+      # race five times running, with three in-step retries each.
+      #
+      # restore-keys matters as much as the key. When ocicl.csv changes the
+      # exact key misses, but the newest previous tree is restored anyway and
+      # `ocicl install' downloads only what actually moved -- so a dependency
+      # bump costs one system off the network rather than thirty-three.
+      #
+      # Keyed by OS and not by architecture on purpose: these are Lisp sources
+      # with no compiled artifacts in them (fasls land in ~/.cache), so the two
+      # Linux runners share one entry and either can populate it.
+      - name: Cache the ocicl dependency tree
+        uses: actions/cache@v4
+        with:
+          path: ocicl/
+          key: ${{ runner.os }}-ocicl-${{ hashFiles('ocicl.csv') }}
+          restore-keys: |
+            ${{ runner.os }}-ocicl-
+
       - name: Restore dependencies
         run: |
           # ocicl install reports a per-system failure and still exits 0:
