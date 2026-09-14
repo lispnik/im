@@ -19,9 +19,19 @@
   "The measurement names --measure accepts, and what each reports.")
 
 (defun parse-measurements (text)
-  (let ((names (if (string-equal text "all")
-                   (mapcar #'car *measurements*)
-                   (remove "" (split-commas (string-downcase text)) :test #'string=))))
+  "The measurement names in TEXT, validated. TEXT is comma separated, or `all'.
+
+Whitespace around a name is dropped rather than rejected: this is documented
+as a comma-separated list, `area, centroid' is how anyone writes one, and the
+MCP tool hands a model the same description -- so refusing the space turns the
+natural spelling into an error result."
+  (let* ((trimmed (string-trim '(#\Space #\Tab) text))
+         (names (if (string-equal trimmed "all")
+                    (mapcar #'car *measurements*)
+                    (remove "" (mapcar (lambda (name)
+                                         (string-trim '(#\Space #\Tab) name))
+                                       (split-commas (string-downcase trimmed)))
+                            :test #'string=))))
     (dolist (name names names)
       (unless (assoc name *measurements* :test #'string=)
         (usage-error "unknown measurement ~S; try ~{~A~^, ~} or all"
@@ -145,47 +155,54 @@ SOURCE is the image the regions were found in, and is read only by
                           (im:convert-color-space source g)
                           g)
                         source))
-          (binary (binarise source threshold)))
+          (binary nil))
+      ;; BINARISE inside the unwind-protect, not beside MEASURED in the LET: a
+      ;; bad --threshold makes it signal, and bound there it would take the
+      ;; gray conversion with it before anything was arranged to free it.
       (unwind-protect
-           (im:with-image (labelled (im:make-label-image binary))
-             (let ((count (nth-value
-                           1 (if watershed
-                                 (im:watershed-segment binary labelled
-                                                       :connectivity connectivity)
-                                 (im:find-regions binary labelled
-                                                  :connectivity connectivity
-                                                  :touch-border keep-border)))))
-               (list :pathname (pathname path)
-                     :method (if watershed :watershed :connected-components)
-                     :region-count count
-                     :regions
-                     ;; --limit bounds what is MEASURED, not just what is
-                     ;; printed: each measurement takes the region count as an
-                     ;; argument, so there is no reason to measure a thousand
-                     ;; regions in order to print twenty.
-                     ;;
-                     ;; Worth having but not dramatic -- about a tenth off a
-                     ;; 1024x1024 image of 740 regions reported at the default
-                     ;; limit. The cost of these functions is dominated by the
-                     ;; passes over the samples, which happen whatever the
-                     ;; count; only the per-region work scales with it. Kept
-                     ;; because it is strictly less work for the same answer
-                     ;; and reads more plainly than measuring and discarding.
-                     ;;
-                     ;; The two give the same answer because a region's
-                     ;; measurements depend only on its own pixels, and
-                     ;; regions come out ordered by label either way -- so the
-                     ;; first LIMIT of them are the same first LIMIT. Safe
-                     ;; only since tecgraf-im v2.2.1: before it the older
-                     ;; measurements indexed their output arrays by label with
-                     ;; no range check, and a count below the number of labels
-                     ;; present wrote past the end of the array rather than
-                     ;; stopping. See the minimum version in README.md.
-                     (let ((reported (if (plusp limit) (min count limit) count)))
-                       (when (plusp reported)
-                         (measure-regions labelled measured reported
-                                          measurements))))))
-        (im:destroy binary)
+           (progn
+             (setf binary (binarise source threshold))
+             (im:with-image (labelled (im:make-label-image binary))
+               (let ((count (nth-value
+                             1 (if watershed
+                                   (im:watershed-segment binary labelled
+                                                         :connectivity connectivity)
+                                   (im:find-regions binary labelled
+                                                    :connectivity connectivity
+                                                    :touch-border keep-border)))))
+                 (list :pathname (pathname path)
+                       :method (if watershed :watershed :connected-components)
+                       :region-count count
+                       :regions
+                       ;; --limit truncates the report and NOT the measurement,
+                       ;; deliberately, having briefly done both.
+                       ;;
+                       ;; Measuring only the first LIMIT regions is correct
+                       ;; against tecgraf-im v2.2.1, where the measurements
+                       ;; range-check the label they index by. Against v2.2.0 it
+                       ;; is an out-of-bounds write, and v2.2.0 is the dangerous
+                       ;; one: every symbol this binding needs resolves there, so
+                       ;; nothing fails loudly, and the binding cannot tell the
+                       ;; two apart because tecgraf-im does not bump
+                       ;; IM_VERSION_NUMBER. That would make the DEFAULT
+                       ;; invocation -- no flags, limit 20 -- corrupt the heap on
+                       ;; any image with more than twenty regions.
+                       ;;
+                       ;; The saving was about a tenth on a 1024x1024 image of
+                       ;; 740 regions, because the cost is dominated by passes
+                       ;; over the samples rather than by per-region work. Not
+                       ;; worth a silent memory-corruption mode on the command
+                       ;; everyone runs first. README.md states the minimum; this
+                       ;; does not stake the default path on it.
+                       (when (plusp count)
+                         (let ((regions (measure-regions labelled measured count
+                                                         measurements)))
+                           (if (plusp limit)
+                               (subseq regions 0 (min count limit))
+                               regions)))))))
+        ;; BINARY is NIL when BINARISE itself signalled; MEASURED is SOURCE
+        ;; when no conversion was needed, and WITH-IMAGE owns that one.
+        (when binary (im:destroy binary))
         (unless (eq measured source) (im:destroy measured))))))
 
 (defun analyze/handler (command)

@@ -529,3 +529,42 @@ one element past the end, and a generous buffer would hide it."
           ;; sits left of centre. A prefix that had measured both regions'
           ;; pixels into one slot would land near the middle.
           (is (< (car (aref centroids 0)) (/ (im:width owned) 2))))))))
+
+(test the-older-measurements-refuse-a-label-image-of-the-wrong-type
+  "imAnalyzeMeasureArea asserts nothing and casts data[0] to imushort*.
+
+So a byte label image is read for twice its own length -- a heap over-read
+that returns plausible numbers. The measurements added in tecgraf-im v2.2.0
+check the type in C; these two never have, and the check has to be here."
+  (im:with-image (gray (gray-gradient 16 16))
+    (signals im:data-error (im:region-areas gray 1))
+    (signals im:data-error (im:region-centroids gray 1))))
+
+(test region-intensities-rejects-the-alpha-plane
+  "imImage's depth counts colour planes only -- alpha is an extra channel --
+and imAnalyzeMeasureIntensity rejects a plane at or past it. Allowing the
+alpha index here made the C layer refuse it by returning its counter-abort
+value, so measuring an RGBA image's alpha reported the work as cancelled."
+  (im:with-image (binary (binary-block :width 16 :height 16 :size 4))
+    (im:with-image (rgba (im:create 16 16 :color-space-rgb :data-type-byte))
+      ;; No wrapper for this yet; the point of the test is the plane bound.
+      (im.ffi::%im-image-add-alpha (im::handle rgba))
+      (is-true (im:has-alpha-p rgba))
+      (is (= 3 (im:depth rgba)) "depth excludes the alpha channel")
+      (multiple-value-bind (labelled count) (im:find-regions binary)
+        (im:with-image (owned labelled)
+          (finishes (im:region-intensities owned rgba count :plane 2))
+          (signals im:im-error (im:region-intensities owned rgba count :plane 3)))))))
+
+(test richardson-lucy-refuses-a-psf-that-would-sum-to-zero
+  "A freshly created PSF is all zeros, and IM reports that by returning its
+counter-abort value -- so forgetting to render into one looked like the user
+cancelling the deconvolution."
+  (im:with-image (source (gray-gradient 16 16))
+    (im:with-images ((result (im:create-based source))
+                     (blank (im:create 5 5 :color-space-gray :data-type-float))
+                     (complex-psf (im:create 5 5 :color-space-gray :data-type-cfloat)))
+      (signals im:data-error
+        (im:deconvolve-richardson-lucy source blank result :iterations 1))
+      (signals im:data-error
+        (im:deconvolve-richardson-lucy source complex-psf result :iterations 1)))))

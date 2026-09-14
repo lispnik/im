@@ -325,14 +325,21 @@ the pipeline destroys whatever it replaces."
     (let* ((radius (max 1 (ceiling (* 3 stddev))))
            (size (1+ (* 2 radius)))
            (psf (im:create size size :color-space-gray :data-type-float))
-           (destination (im:create-based image)))
+           (destination (im:create-based image))
+           (ok nil))
+      ;; DESTINATION is inside the cleanup as well as PSF. The pipeline frees
+      ;; whatever an operation returns, and an operation that signals returns
+      ;; nothing -- so a destination allocated before the call and not freed
+      ;; here is one nothing owns.
       (unwind-protect
            (progn
              (im:render-gaussian psf stddev)
              (verbose "~&  PSF ~Dx~D, ~D iterations~%" size size iterations)
              (im:deconvolve-richardson-lucy image psf destination
-                                            :iterations iterations))
-        (im:destroy psf))
+                                            :iterations iterations)
+             (setf ok t))
+        (im:destroy psf)
+        (unless ok (im:destroy destination)))
       destination)))
 
 ;;; Thresholding and morphology -----------------------------------------------

@@ -331,6 +331,17 @@ SRC and DST may be the same image."
     (cl:error 'data-error
               :detail (format nil "the point spread function must have odd dimensions, got ~Dx~D"
                               (width psf) (height psf))))
+  ;; The remaining two ways iNormalizePSF gives up, both of which IM reports by
+  ;; returning its counter-abort value. A complex PSF falls through its type
+  ;; switch to a zero sum; so does an all-zero one, which is what a freshly
+  ;; created PSF is before anything renders into it -- an easy mistake, and
+  ;; "cancelled" is a poor way to hear about it.
+  (when (complex-image-p psf)
+    (cl:error 'data-error
+              :detail "the point spread function must be a real image"))
+  (unless (plusp (getf (statistics psf 0) :max))
+    (cl:error 'data-error
+              :detail "the point spread function has no positive samples; it would sum to zero"))
   (unless (and (integerp iterations) (not (minusp iterations)))
     (cl:error 'data-error
               :detail (format nil "deconvolution iterations must be a non-negative integer, got ~S"
@@ -896,8 +907,18 @@ output says so. Convex objects of similar size separate cleanly."
 
 A REGION-COUNT below the highest label measures the first REGION-COUNT
 regions and ignores the rest."
+  ;; imAnalyzeMeasureArea asserts nothing about the image: it casts data[0] to
+  ;; imushort* and walks it, so a byte label image is read for twice its own
+  ;; length. The newer measurements check the type in C; these two never have.
+  (%check-label-image labelled "region-areas" "label image")
   (cffi:with-foreign-object (areas :int region-count)
-    (im.ffi::%im-analyze-measure-area (handle labelled) areas region-count)
+    ;; And the return value is the cancellation flag, which this used to
+    ;; discard -- leaving a counter abort to come back as the memset-zeroed
+    ;; arrays, an entirely plausible "every region has area 0". Reachable now
+    ;; that `im analyze --verbose' attaches a progress callback.
+    (check-operation "region-areas"
+      (not (zerop (im.ffi::%im-analyze-measure-area
+                   (handle labelled) areas region-count))))
     (let ((result (make-array region-count)))
       (dotimes (i region-count result)
         (setf (aref result i) (cffi:mem-aref areas :int i))))))
@@ -911,10 +932,12 @@ area argument here -- passing NULL is the documented way to ask for that.
 cx and cy are double*, not float*. Reading them as single floats returned
 values like 4.07e9 paired with 4.89e-24: the two halves of one double, read as
 two floats."
+  (%check-label-image labelled "region-centroids" "label image")
   (cffi:with-foreign-objects ((cx :double region-count)
                               (cy :double region-count))
-    (im.ffi::%im-analyze-measure-centroid
-     (handle labelled) (cffi:null-pointer) region-count cx cy)
+    (check-operation "region-centroids"
+      (not (zerop (im.ffi::%im-analyze-measure-centroid
+                   (handle labelled) (cffi:null-pointer) region-count cx cy))))
     (let ((result (make-array region-count)))
       (dotimes (i region-count result)
         (setf (aref result i)
@@ -1028,11 +1051,16 @@ one-pixel region reports 0, and a region with no pixels reports zeros
 throughout."
   (%check-label-image labelled "region-intensities" "label image")
   (%check-same-size labelled image "region-intensities")
-  (let ((depth (+ (depth image) (if (has-alpha-p image) 1 0))))
-    (unless (< -1 plane depth)
-      (cl:error 'im-error
-                :detail (format nil "plane ~S out of range for a ~D-plane image"
-                                plane depth))))
+  ;; DEPTH and not depth-plus-alpha, unlike STATISTICS above. imImage's depth
+  ;; counts colour planes only -- the header calls alpha "an extra channel" --
+  ;; and imAnalyzeMeasureIntensity rejects plane >= depth. Allowing the alpha
+  ;; index here let the C layer refuse it by returning its counter-abort value,
+  ;; so measuring the alpha of an RGBA image reported the work as cancelled.
+  (unless (< -1 plane (depth image))
+    (cl:error 'im-error
+              :detail (format nil "plane ~S out of range for a ~D-plane image~@[ (alpha is not measurable)~]"
+                              plane (depth image)
+                              (and (has-alpha-p image) (= plane (depth image))))))
   (if (zerop region-count)
       #()
       (cffi:with-foreign-objects ((minimum :double region-count)

@@ -533,3 +533,16 @@ the same way round after a single-tile montage sized exactly to the image."
               "first pixel stayed bright -- tile not mirrored")
           (is (< (cffi:mem-aref p :unsigned-char (1- n)) 55)
               "last pixel stayed dark -- tile not mirrored"))))))
+
+(test analyze-measure-tolerates-spaces-after-the-commas
+  "`--measure \"area, centroid\"' is how anyone writes a comma-separated list,
+and the MCP tool hands a model the same description -- so refusing the space
+turned the natural spelling into an error."
+  (with-cli
+    (multiple-value-bind (out err code)
+        (run-cli "analyze" "--measure" "area, centroid" "--limit" "1" "--json"
+                 (namestring (image-file "rice.png")))
+      (is (zerop code) "spaces after commas were rejected: ~A" err)
+      (let ((region (aref (gethash "regions" (shasht:read-json out)) 0)))
+        (is-true (nth-value 1 (gethash "area" region)))
+        (is-true (nth-value 1 (gethash "x" region)))))))

@@ -160,10 +160,10 @@ order decide.
   `imProcessCanny` opened a counter with `imCounterBegin` and closed it with
   `imProcessCounterEnd`, which in the OpenMP build freed an `omp_lock_t` the
   plain Begin never allocated — so any operation with a progress callback
-  attached died at address 0. `im process --verbose` is the reachable case,
-  since that is the only subcommand that installs one; `im analyze` never has,
-  so its `--verbose` was never affected. And `imAnalyzeMeasureArea` and five
-  others indexed their
+  attached died at address 0. Both `im process --verbose` and `im analyze
+  --verbose` install one now, so both reach it; only `im process` did at the
+  time, which is why the era's reproducer was a pipeline and not an analysis.
+  And `imAnalyzeMeasureArea` and five others indexed their
   output arrays by label with no range check, so a `region_count` below the
   number of labels wrote past the end. Both were worked around here — the
   callback detached around two calls, a scan for the highest label before two
@@ -189,7 +189,7 @@ order decide.
 
 ## Tests
 
-`tests/`, one file per area, 496 checks. Beyond the obvious coverage they
+`tests/`, one file per area, 507 checks. Beyond the obvious coverage they
 assert the things that previously went untested: the condition hierarchy, the
 restart protocol, finalizer and double-destroy behaviour, that every binding
 resolves against the loaded libraries, and — by running `bin/im` as a
